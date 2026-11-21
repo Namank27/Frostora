@@ -1,0 +1,30 @@
+{
+	"appId": "com.frostora.app",
+	"appName": "Frostora",
+	"webDir": "www",
+	"server": {
+		"url": "https://REPLACE-WITH-DEPLOYED-FROSTORA-URL",
+		"cleartext": false,
+		"allowNavigation": [
+			"youtube.com",
+			"www.youtube.com",
+			"music.youtube.com",
+			"youtu.be",
+			"googlevideo.com",
+			"*.googlevideo.com",
+			"yt3.ggpht.com",
+			"i.ytimg.com",
+			"api.web3forms.com"
+		]
+	},
+	"android": {
+		"allowMixedContent": true
+	},
+	"plugins": {
+		"SplashScreen": {
+			"launchShowDuration": 800,
+			"backgroundColor": "#0B0B0D",
+			"showSpinner": false
+		}
+	}
+}
