@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Frostora</string>
+    <string name="title_activity_main">Frostora</string>
+    <string name="package_name">com.frostora.app</string>
+    <string name="custom_url_scheme">com.frostora.app</string>
+</resources>
