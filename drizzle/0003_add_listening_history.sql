@@ -1,0 +1,9 @@
+CREATE TABLE IF NOT EXISTS listening_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind TEXT NOT NULL,
+  video_id TEXT NOT NULL DEFAULT '',
+  title TEXT NOT NULL DEFAULT '',
+  artist TEXT NOT NULL DEFAULT '',
+  query TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL
+);
