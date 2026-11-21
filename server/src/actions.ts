@@ -221,7 +221,7 @@ function cached<T>(key: string, ttlMs: number, load: () => Promise<T>): Promise<
 
 /* ---------------- InnerTube live search ---------------- */
 
-const INNERTUBE_KEY = "AIzaSyC9XL3ZjWddXya6X74dJoCTL-WEYFDNX30";
+const INNERTUBE_KEY = process.env.INNERTUBE_KEY ?? "";
 // params filter: songs only (EgWKAQIIAWoKEAoQAxAEEAkQBQ==)
 const SONG_FILTER_PARAMS = "EgWKAQIIAWoKEAoQAxAEEAkQBQ%3D%3D";
 
