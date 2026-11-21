@@ -1,0 +1,1497 @@
+@import url('https://fonts.googleapis.com/css2?family=Marcellus&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,500&display=swap");
+@import "tailwindcss";
+@import "tailwindcss-safe-area";
+
+@theme {
+  --text-xs: 12px;
+  --text-xs--line-height: 16px;
+  --text-sm: 14px;
+  --text-sm--line-height: 20px;
+  --text-base: 16px;
+  --text-base--line-height: 24px;
+  --text-lg: 18px;
+  --text-lg--line-height: 28px;
+  --text-xl: 20px;
+  --text-xl--line-height: 28px;
+  --text-2xl: 24px;
+  --text-2xl--line-height: 32px;
+  --text-3xl: 30px;
+  --text-3xl--line-height: 36px;
+  --font-display: "Marcellus", "Times New Roman", serif;
+}
+
+:root {
+  color-scheme: dark;
+  /* Vision frost theme (from the user's reference screenshots,
+     20 Nov 2026): near-black charcoal, neutral frosted glass like
+     Apple Music / visionOS — big rounded panels floating over a
+     wallpaper, white text, grey secondary text. The dusky purple /
+     frosted white of the ShinyButton palette survives ONLY as the accent (play
+     controls, progress fill, active states) where it fits. */
+  --bg: #0a0a0c;
+  --surface: #17171a;
+  --surface-2: #1f1f23;
+  --text: #f4f4f6;
+  --dim: #9c9ca5;
+  --border: #2c2c31;
+  --accent: #f4f4f6;
+  --accent-dim: #83838d;
+  --silver: #f4f4f6;
+  --silver-bright: #ffffff;
+  --purple: #8a7bb8;
+  --purple-deep: #4a3d66;
+  --radius: 20px;
+  --space-surface: var(--surface);
+  --space-surface-alt: var(--surface-2);
+  --space-muted: var(--dim);
+  --space-border: var(--border);
+  --space-accent: var(--accent);
+}
+
+/* Dark charcoal surfaces — class names kept (.metal / .metal-flat)
+   so the layout is untouched; only the finish changed. */
+.metal {
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02) 42%, rgba(0, 0, 0, 0.30) 100%),
+    linear-gradient(180deg, #26262b, #141416);
+}
+
+.metal-flat {
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015) 45%, rgba(0, 0, 0, 0.24) 100%),
+    linear-gradient(180deg, #1e1e22, #121214);
+}
+
+/* LIQUID GLASS surface system (refactor, 20 Nov 2026) — Apple's
+   Liquid Glass material on the app's EXISTING palette: same
+   charcoal ground, same white text, same white accent; only the
+   material changed. Every glass surface now runs the full spec —
+   backdrop blur(28px) saturate(180%), a hairline translucent
+   border (rgba(255,255,255,0.08) — light, not a drawn line), a
+   crisp specular inner top-edge highlight
+   (inset 0 1px 0 rgba(255,255,255,0.18)) and a soft, wide ambient
+   shadow so panels read as suspended over the canvas instead of
+   boxed onto it. Blur lives ONLY on these glass surfaces (pills,
+   floating bars, menus, panels) — never full-screen — to stay
+   smooth at 60fps on the phone. */
+.glass {
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.06) 42%, rgba(10, 10, 12, 0.14) 100%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  backdrop-filter: blur(28px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 -12px 20px rgba(0, 0, 0, 0.20),
+    0 16px 40px rgba(0, 0, 0, 0.45),
+    0 4px 12px rgba(0, 0, 0, 0.30);
+}
+.glass-soft {
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.04) 45%, rgba(10, 10, 12, 0.08) 100%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  backdrop-filter: blur(18px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 10px 24px rgba(0, 0, 0, 0.34);
+}
+
+/* About-page Feedback pill morph: the pill's width/height are set
+   inline per state (pill / input / thanks) and glide between them
+   on one interruptible transition; the swapped-in content fades in
+   over the tail of the morph. Both still under reduced motion. */
+.feedback-morph {
+  transition:
+    width 380ms cubic-bezier(0.32, 0.72, 0, 1),
+    height 380ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+@keyframes feedback-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.feedback-in {
+  animation: feedback-in 200ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .feedback-morph {
+    transition: none;
+  }
+  .feedback-in {
+    animation: none;
+  }
+}
+
+/* The big floating frosted panel from the reference screenshots —
+   Library + Albums/Playlist content living inside one large
+   rounded sheet over the wallpaper. Full Liquid Glass spec —
+   same 28px / 180% material as .glass, because whole pages sit
+   on it and it must refract the wallpaper / ambient glow. */
+.vision-panel {
+  background:
+    linear-gradient(160deg, rgba(58, 58, 64, 0.52), rgba(28, 28, 32, 0.60) 55%, rgba(16, 16, 19, 0.66) 100%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  backdrop-filter: blur(28px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 24px 60px rgba(0, 0, 0, 0.5),
+    0 6px 18px rgba(0, 0, 0, 0.35);
+}
+/* Perf (phone): the vision panel is a page-sized surface, so its
+   backdrop blur re-filters the whole screen on every scroll frame.
+   At phone widths the frost reads the same at 16px — the panel's
+   own translucent gradient does most of the work — at a fraction
+   of the GPU cost. Desktop keeps the full 28px material. */
+@media (max-width: 767px) {
+  .vision-panel {
+    -webkit-backdrop-filter: blur(16px) saturate(160%);
+    backdrop-filter: blur(16px) saturate(160%);
+  }
+}
+
+/* Library sidebar rows (reference): quiet text rows, the selected
+   one a soft light pill. */
+.lib-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 11px;
+  border-radius: 12px;
+  padding: 8px 12px;
+  text-align: left;
+  font-size: 14px;
+  color: var(--text);
+  transition: background-color 150ms ease-out, transform 100ms ease-out;
+}
+.lib-item:active { transform: scale(0.98); }
+.lib-item .lib-ic { color: var(--dim); flex: none; display: flex; }
+.lib-item.is-active {
+  background: rgba(255, 255, 255, 0.16);
+  font-weight: 600;
+}
+.lib-item.is-active .lib-ic { color: #fff; }
+
+/* Floating pill mini-player (reference): a full capsule — transport
+   controls, an inset darker capsule holding cover + title, then
+   lyrics / queue / volume. */
+.pill-player {
+  border-radius: 999px;
+  background:
+    linear-gradient(160deg, rgba(70, 70, 78, 0.66), rgba(32, 32, 38, 0.72) 55%, rgba(18, 18, 21, 0.78) 100%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  backdrop-filter: blur(28px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 -10px 18px rgba(0, 0, 0, 0.20),
+    0 18px 44px rgba(0, 0, 0, 0.55),
+    0 4px 12px rgba(0, 0, 0, 0.32);
+}
+.pill-player-inset {
+  background: rgba(0, 0, 0, 0.38);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    inset 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+/* Vertical pill nav (reference): a slim floating capsule of icon
+   buttons down the left edge on wide screens. */
+.vnav {
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, rgba(64, 64, 72, 0.56), rgba(26, 26, 30, 0.64) 100%);
+  -webkit-backdrop-filter: blur(24px) saturate(170%);
+  backdrop-filter: blur(24px) saturate(170%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 18px 40px rgba(0, 0, 0, 0.5);
+}
+.vnav button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  color: var(--dim);
+  transition: background-color 150ms ease-out, color 150ms ease-out, transform 100ms ease-out;
+}
+.vnav button:active { transform: scale(0.94); }
+.vnav button.is-active {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
+
+/* LiquidMetalButton host (ThreeUI authored component, vendored under
+   client/src/shaders/liquid-metal-button/). Host rules are the authored
+   ones from the ThreeUI stylesheet: the iframe fills the host, fades in
+   when its WebGL document is ready, and the component itself unmounts
+   the iframe when offscreen or the tab is hidden. The host background
+   from the stylesheet (#070708) is dropped — the app's surfaces vary
+   and the iframe document paints its own ground. */
+.liquid-metal-button {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  isolation: isolate;
+}
+.liquid-metal-button__frame {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  opacity: 0;
+  transition: opacity 180ms ease-out;
+}
+.liquid-metal-button__frame.is-ready {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .liquid-metal-button__frame {
+    transition: none;
+  }
+}
+
+/* Player transport host fade: the play variant's bloom spills past
+   the 88px circle and would otherwise be cut into a visible square
+   by the 118px host's edge. A radial mask keeps the circle and its
+   rim fully opaque and fades only the spill, so the halo dies out
+   round instead of square. (farthest-side of the square host = its
+   half-width; the circle's rim sits at ~74% of that.) */
+.liquid-metal-host-fade {
+  -webkit-mask-image: radial-gradient(circle farthest-side at center, #000 74%, transparent 100%);
+  mask-image: radial-gradient(circle farthest-side at center, #000 74%, transparent 100%);
+}
+
+/* Soft white-silver halo for the front carousel tile / player bar.
+   (Class name kept from the silver theme; the glow is now white.) */
+.silver-glow {
+  box-shadow:
+    0 0 42px 4px rgba(255, 255, 255, 0.08),
+    0 0 60px 10px rgba(255, 255, 255, 0.05),
+    0 18px 44px rgba(0, 0, 0, 0.55);
+}
+
+.tile-shadow {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.10),
+    inset 0 -14px 26px rgba(0, 0, 0, 0.45),
+    0 16px 34px rgba(0, 0, 0, 0.6);
+}
+
+/* ============================================================
+   Frostora crystal icon — header ornament (21 Nov).
+   Three subtle layers around the crystal in the header, all
+   decorative and pointer-transparent:
+   1. A soft icy halo that breathes in and out (always on).
+   2. Thin sound-wave rings that expand outwards while a song
+      is playing; when paused they settle to one faint still ring.
+   3. Tiny frost sparkles that drift a few pixels and twinkle.
+   Colours stay in the frosted white / pale-ice family of the
+   theme. Everything stills under prefers-reduced-motion. */
+.crystal-halo {
+  position: absolute;
+  inset: -7px;
+  border-radius: 9999px;
+  background: radial-gradient(
+    circle,
+    rgba(226, 240, 255, 0.30) 0%,
+    rgba(205, 228, 250, 0.12) 52%,
+    rgba(205, 228, 250, 0) 72%
+  );
+  pointer-events: none;
+  animation: crystal-halo-breathe 5.2s ease-in-out infinite;
+  will-change: opacity, transform;
+}
+@keyframes crystal-halo-breathe {
+  0%, 100% { opacity: 0.55; transform: scale(0.96); }
+  50% { opacity: 1; transform: scale(1.07); }
+}
+
+.crystal-ripple {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  border: 1px solid rgba(224, 238, 252, 0.5);
+  opacity: 0;
+  pointer-events: none;
+}
+/* Paused / nothing playing: a single calm, still ring. */
+.crystal-ripple.is-still {
+  opacity: 0.16;
+  transform: scale(1.14);
+}
+.crystal-ripple.is-live {
+  animation: crystal-ripple-wave 2.6s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+  will-change: opacity, transform;
+}
+.crystal-ripple.is-live.delay-1 { animation-delay: 0.85s; }
+.crystal-ripple.is-live.delay-2 { animation-delay: 1.7s; }
+@keyframes crystal-ripple-wave {
+  0% { opacity: 0; transform: scale(1); }
+  18% { opacity: 0.5; }
+  70% { opacity: 0.14; }
+  100% { opacity: 0; transform: scale(1.38); }
+}
+
+.crystal-sparkle {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  border-radius: 9999px;
+  background: rgba(240, 248, 255, 0.95);
+  box-shadow: 0 0 5px 1px rgba(205, 228, 250, 0.55);
+  opacity: 0;
+  pointer-events: none;
+  animation: crystal-sparkle-twinkle 6s ease-in-out infinite;
+  will-change: opacity, transform;
+}
+@keyframes crystal-sparkle-twinkle {
+  0%, 100% { opacity: 0; transform: translate(0, 0) scale(0.6); }
+  45% { opacity: 0.9; }
+  50% { opacity: 0.75; transform: translate(var(--drift-x, 2px), var(--drift-y, -3px)) scale(1); }
+  60% { opacity: 0.9; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .crystal-halo,
+  .crystal-ripple.is-live,
+  .crystal-sparkle {
+    animation: none;
+  }
+  /* Sparkles vanish entirely when stilled; the halo rests at a
+     gentle mid-glow and the still ring keeps its calm outline. */
+  .crystal-sparkle { opacity: 0; }
+  .crystal-halo { opacity: 0.7; transform: none; }
+}
+
+/* App background — static, no WebGL, no Nebula. Charcoal black with
+   two very restrained dusky-purple washes (top and bottom) so the
+   frosted glass has something muted to show through. Pure CSS paint,
+   zero runtime cost.
+   SPATIAL: three depth planes in one fixed layer —
+   far wash (::before, moves slowest on scroll via --sp-slow),
+   mid wash (the element's own gradients), near vignette (::after,
+   moves opposite via --sp-fast). JS only writes the two custom
+   properties on scroll (rAF-throttled, transform-only). */
+.app-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background:
+    radial-gradient(120% 70% at 82% -6%, rgba(255, 255, 255, 0.05) 0%, rgba(10, 10, 12, 0) 55%),
+    radial-gradient(90% 55% at 8% 104%, rgba(255, 255, 255, 0.03) 0%, rgba(10, 10, 12, 0) 60%),
+    radial-gradient(60% 40% at 50% 42%, rgba(255, 255, 255, 0.03) 0%, rgba(10, 10, 12, 0) 70%),
+    linear-gradient(168deg, #17171a 0%, #0a0a0c 52%, #060607 100%);
+}
+.app-bg::before {
+  content: "";
+  position: absolute;
+  inset: -12% -18% auto -18%;
+  height: 58vh;
+  background: radial-gradient(58% 100% at 78% 0%, rgba(255, 255, 255, 0.05) 0%, rgba(10, 10, 12, 0) 68%);
+  transform: translate3d(0, var(--sp-slow, 0px), 0);
+  will-change: transform;
+}
+.app-bg::after {
+  content: "";
+  position: absolute;
+  inset: auto -18% -14% -18%;
+  height: 52vh;
+  background:
+    radial-gradient(52% 100% at 18% 100%, rgba(255, 255, 255, 0.035) 0%, rgba(10, 10, 12, 0) 66%),
+    radial-gradient(120% 120% at 50% 115%, rgba(0, 0, 0, 0.38) 0%, rgba(10, 10, 12, 0) 62%);
+  transform: translate3d(0, var(--sp-fast, 0px), 0);
+  will-change: transform;
+}
+
+/* User wallpaper layer — the image the user picked (link or upload)
+   sits fixed behind everything, under a dark scrim so the frosted
+   panels and white text stay readable over any photo. */
+.wallpaper-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background: #0a0a0c;
+}
+.wallpaper-bg img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.wallpaper-bg::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(8, 8, 10, 0.42) 0%, rgba(8, 8, 10, 0.30) 45%, rgba(8, 8, 10, 0.55) 100%);
+}
+
+/* ============================================================
+   COLLECTION PAGE — ambient glow + sticky glass top bar
+   (Echo-style redesign, 21 Nov 2026). The Playlist / Album
+   detail page sits on a pure-dark #0B0B0D ground. Behind its
+   top half, the cover art glows: the artwork itself, blurred
+   hard and saturated, plus two radial washes in the cover's
+   sampled dominant / vibrant colours (App.tsx samples them on
+   a tiny canvas and sets the glow layer's background inline).
+   A fade veil dissolves all of it into solid #0B0B0D before
+   the tracklist, so rows scroll over flat dark, never over
+   colour. The ambient layers are clipped by .collection-ambient
+   ONLY — never by the section — because an overflow clip on an
+   ancestor turns it into a scroll container and the sticky top
+   bar would pin to the page top instead of gliding with it.
+   Everything here is static paint: the blurred layer is
+   rendered once and never moves, so scrolling stays smooth on
+   the phone; the only backdrop-filter is the small top-bar
+   pill.
+   ============================================================ */
+.collection-page {
+  background: #0B0B0D;
+  isolation: isolate;
+}
+.collection-ambient {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: min(680px, 108svh);
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 0;
+}
+.collection-ambient-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 22%;
+  /* The scale hides the blur's feathered edges inside the clip. */
+  transform: scale(1.5) translateZ(0);
+  filter: blur(52px) saturate(1.55) brightness(0.85);
+  opacity: 0.55;
+}
+.collection-ambient-glow {
+  position: absolute;
+  inset: 0;
+}
+.collection-ambient-fade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(11, 11, 13, 0.08) 0%,
+    rgba(11, 11, 13, 0.20) 32%,
+    rgba(11, 11, 13, 0.60) 60%,
+    rgba(11, 11, 13, 0.92) 82%,
+    #0B0B0D 100%
+  );
+}
+
+/* Sticky glass top bar for the collection page: the wrapper is
+   the sticky element (top = the app header's sticky offset +
+   its height + a small gap, safe-area aware) and the pill
+   inside carries the glass. Because the pill is always frosted,
+   the bar reads identically at rest over the glow and pinned
+   over the scrolling tracklist — no scroll listener, no state
+   swap, nothing to jank on mobile. */
+.collection-topbar {
+  position: sticky;
+  top: calc(env(safe-area-inset-top, 0px) + 88px);
+  z-index: 35;
+  padding: 10px 12px 2px;
+}
+@media (min-width: 640px) {
+  .collection-topbar {
+    padding: 12px 16px 2px;
+  }
+}
+.collection-topbar-pill {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 999px;
+  padding: 5px 6px;
+  background:
+    linear-gradient(155deg, rgba(42, 42, 48, 0.55), rgba(17, 17, 20, 0.48) 58%, rgba(11, 11, 13, 0.55) 100%);
+  -webkit-backdrop-filter: blur(22px) saturate(170%);
+  backdrop-filter: blur(22px) saturate(170%);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 14px 34px rgba(0, 0, 0, 0.42),
+    0 4px 10px rgba(0, 0, 0, 0.28);
+}
+
+/* Carousel ring */
+.ring-stage {
+  perspective: 950px;
+  perspective-origin: 50% 42%;
+}
+.ring {
+  transform-style: preserve-3d;
+}
+.ring-tile {
+  transform-style: preserve-3d;
+}
+
+/* Interactive scrubbers (seek + volume) — white fill, white thumb.
+   Sleek and thin (4px) at rest; on hover (fine pointers) or while
+   dragging / keyboard-focused the track smoothly thickens to 8px
+   and the thumb swells with a silver glow ring. The height change
+   is safe: every fader sits in a flex row whose height is set by
+   its labels / buttons, so nothing around it shifts. Numbers next
+   to faders are tabular-nums in the markup, so they never jitter
+   while the bar moves. */
+input[type="range"].fader {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent) var(--fill, 0%), #3a3a40 var(--fill, 0%));
+  outline: none;
+  min-height: 4px;
+  transition: height 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@media (hover: hover) and (pointer: fine) {
+  input[type="range"].fader:hover { height: 8px; }
+}
+input[type="range"].fader:active,
+input[type="range"].fader:focus-visible { height: 8px; }
+input[type="range"].fader::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: linear-gradient(160deg, #ffffff, #b9b9c2);
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.6), 0 0 10px rgba(255, 255, 255, 0.30);
+  cursor: pointer;
+  transition: box-shadow 180ms cubic-bezier(0.22, 1, 0.36, 1), width 180ms cubic-bezier(0.22, 1, 0.36, 1), height 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+input[type="range"].fader::-moz-range-thumb {
+  width: 13px;
+  height: 13px;
+  border: none;
+  border-radius: 50%;
+  background: linear-gradient(160deg, #ffffff, #b9b9c2);
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.6);
+  cursor: pointer;
+  transition: box-shadow 180ms cubic-bezier(0.22, 1, 0.36, 1), width 180ms cubic-bezier(0.22, 1, 0.36, 1), height 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+input[type="range"].fader:active::-webkit-slider-thumb,
+input[type="range"].fader:focus-visible::-webkit-slider-thumb {
+  width: 16px;
+  height: 16px;
+  box-shadow:
+    0 1px 5px rgba(0, 0, 0, 0.6),
+    0 0 0 5px rgba(255, 255, 255, 0.14),
+    0 0 16px rgba(255, 255, 255, 0.45);
+}
+input[type="range"].fader:active::-moz-range-thumb,
+input[type="range"].fader:focus-visible::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  box-shadow:
+    0 1px 5px rgba(0, 0, 0, 0.6),
+    0 0 0 5px rgba(255, 255, 255, 0.14),
+    0 0 16px rgba(255, 255, 255, 0.45);
+}
+
+/* Cover art always centre-crops: every poster in the app renders
+   with object-fit: cover (set per element), and this base rule pins
+   the crop position to the centre so no cover is ever letterboxed,
+   stretched, or off-centre. (The Aceternity hero demo opts out with
+   its own sourced object-position utility, which layers above
+   base.) */
+@layer base {
+  img {
+    object-position: center;
+  }
+}
+
+/* Touch targets (ux-motion / Fitts): buttons get a 44px minimum hit
+   height even when the visible icon is smaller; fields keep 32px so
+   dense forms stay compact. */
+@layer base {
+  button, [role="button"] {
+    min-height: 2.75rem;
+  }
+  select, summary, input:not([type="checkbox"], [type="radio"]) {
+    min-height: 2rem;
+  }
+}
+
+/* ============================================================
+   LIQUID GLASS REFACTOR — layout polish + Apple-grade motion
+   (20 Nov 2026). Palette untouched; everything here is material,
+   spacing, typography and motion. All animation is transform /
+   opacity / backdrop-filter only — GPU-composited, no layout
+   thrash — and the reduced-motion block at the foot of this file
+   neutralises every piece of it.
+   ============================================================ */
+
+/* Tight letter-spacing on headings (spec). Uppercase kickers set
+   their own wide tracking in utilities, which layer above base. */
+@layer base {
+  h1, h2 {
+    letter-spacing: -0.015em;
+  }
+}
+
+/* Scroll polish for horizontal shelves: no visible scrollbar
+   (the rows already set scrollbar-width:none inline) and a soft
+   mask-image fade at both edges so cards glide into the margins
+   instead of hard-clipping. */
+.shelf-fade {
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 20px, #000 calc(100% - 20px), transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0, #000 20px, #000 calc(100% - 20px), transparent 100%);
+}
+
+/* Tactile transport controls: press-down scale(0.92) on tap and a
+   soft brightness lift on hover (fine pointers only). Used on the
+   player / mini-player / panel transport buttons — it REPLACES
+   their Tailwind active:scale so transform has one owner. */
+.lg-press {
+  transition: transform 130ms cubic-bezier(0.22, 1, 0.36, 1), filter 200ms cubic-bezier(0.22, 1, 0.36, 1), color 150ms ease-out;
+}
+.lg-press:active { transform: scale(0.92); }
+@media (hover: hover) and (pointer: fine) {
+  .lg-press:hover { filter: brightness(1.18); }
+}
+
+/* Frosted play pill on cover cards: always visible on touch;
+   on hover-capable screens it rests hidden and fades / scales in
+   over the card's group hover — Apple Music style. */
+.cover-play-reveal {
+  transition: opacity 200ms cubic-bezier(0.22, 1, 0.36, 1), transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@media (hover: hover) and (pointer: fine) {
+  .cover-play-reveal {
+    opacity: 0;
+    transform: scale(0.82);
+  }
+  .group:hover .cover-play-reveal,
+  .group:focus-visible .cover-play-reveal {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Now-playing indicator on the current track row: three bars in
+   a gentle equaliser bounce instead of a static glyph. */
+@keyframes eq-bounce {
+  0%, 100% { transform: scaleY(0.35); }
+  50% { transform: scaleY(1); }
+}
+.eq-bar {
+  width: 3px;
+  height: 11px;
+  border-radius: 2px;
+  background: currentColor;
+  transform-origin: bottom;
+  animation: eq-bounce 900ms cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+
+/* Dynamic ambient backdrop: the playing song's artwork, heavily
+   blurred, sitting STATIC behind the main canvas so the Liquid
+   Glass panels refract and tint with the music. The image
+   crossfades per song (ambient-fade, one-shot) and then holds
+   perfectly still. It used to also run a 26s infinite transform
+   drift — a full-screen blurred layer in constant motion UNDER
+   every backdrop-filter panel in the app, which forced the
+   browser to re-blur all of that glass on every frame; on the
+   phone's GPU the panels shimmered / flickered in normal use
+   (flicker fix, 21 Nov). A static backdrop is blurred once and
+   stays stable. */
+@keyframes ambient-fade {
+  from { opacity: 0; }
+  to { opacity: 0.5; }
+}
+.ambient-img {
+  animation: ambient-fade 900ms ease-out both;
+  /* The static replacement for the drift's scale: the heavy blur
+     would otherwise feather the image's edges transparent and
+     show the page background as a bright frame. */
+  transform: scale(1.55);
+}
+/* The Now Playing tint gradient breathes the same way — a slow
+   scale well past 1 so its edges never show. */
+@keyframes tint-drift {
+  from { transform: scale(1.06) translate3d(0, -0.6%, 0); }
+  to { transform: scale(1.11) translate3d(0, 0.8%, 0); }
+}
+.tint-drift {
+  animation: tint-drift 24s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+/* Morphing mini-player → Now Playing: the full player grows out
+   of the bottom of the screen (where the pill floats) on the
+   spring curve instead of sliding in flat. */
+@keyframes player-in {
+  from { opacity: 0; transform: translateY(26px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.player-in {
+  animation: player-in 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  transform-origin: 50% 100%;
+}
+
+/* Living album art (Now Playing): expanded with a deep ambient
+   shadow while playing; settles slightly smaller with a softer
+   shadow when paused. One long spring on transform + shadow. */
+.living-art {
+  transition:
+    transform 700ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 700ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.living-art.is-playing {
+  transform: scale(1);
+  box-shadow:
+    0 10px 22px rgba(0, 0, 0, 0.42),
+    0 34px 68px rgba(0, 0, 0, 0.60),
+    0 56px 100px rgba(0, 0, 0, 0.32);
+}
+.living-art.is-paused {
+  transform: scale(0.94);
+  box-shadow:
+    0 6px 14px rgba(0, 0, 0, 0.34),
+    0 16px 32px rgba(0, 0, 0, 0.40);
+}
+
+/* ============================================================
+   NOW PLAYING REDESIGN — Apple Music Liquid Glass spec
+   (20 Nov 2026). The hero control card and the segmented pill
+   share one exact material: white glass at 12% over a 36px /
+   180% backdrop blur, a crisp translucent rim, specular inner
+   highlights top and bottom, and one soft floating shadow.
+   The ambient background crossfades over 800ms on track change
+   (np-fade-in); the scrubber / volume are white pill faders.
+   ============================================================ */
+.np-glass-card {
+  background: rgba(255, 255, 255, 0.12);
+  -webkit-backdrop-filter: blur(36px) saturate(180%);
+  backdrop-filter: blur(36px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.45),
+    inset 0 -1px 1px rgba(255, 255, 255, 0.12),
+    0 20px 40px rgba(0, 0, 0, 0.2);
+}
+/* Frosted white play/pause circle (21 Nov): translucent white
+   glass over the ambient background, backdrop blur, specular rim
+   top and bottom like .np-glass-card, soft floating shadow, and a
+   dark charcoal glyph. No glow field / bloom pad behind it. */
+.frosted-play-btn {
+  color: #1b1b1f;
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.94), rgba(255, 255, 255, 0.78) 46%, rgba(255, 255, 255, 0.62) 100%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.9),
+    inset 0 -1px 1px rgba(255, 255, 255, 0.35),
+    inset 0 -10px 18px rgba(0, 0, 0, 0.08),
+    0 14px 30px rgba(0, 0, 0, 0.28),
+    0 4px 10px rgba(0, 0, 0, 0.18);
+}
+.np-seg-pill {
+  background: rgba(255, 255, 255, 0.12);
+  -webkit-backdrop-filter: blur(36px) saturate(180%);
+  backdrop-filter: blur(36px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.45),
+    inset 0 -1px 1px rgba(255, 255, 255, 0.12),
+    0 20px 40px rgba(0, 0, 0, 0.2);
+}
+
+/* White pill faders for the Now Playing scrubber + volume:
+   6px pill track (white 28%), solid white fill, glowing white
+   thumb that swells slightly on hover / drag / focus. */
+input[type="range"].np-fader {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  min-height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #ffffff var(--fill, 0%), rgba(255, 255, 255, 0.28) var(--fill, 0%));
+  outline: none;
+  cursor: pointer;
+}
+input[type="range"].np-fader::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.35), 0 0 10px rgba(255, 255, 255, 0.55);
+  cursor: pointer;
+  transition: width 160ms cubic-bezier(0.22, 1, 0.36, 1), height 160ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+input[type="range"].np-fader::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: none;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.35), 0 0 10px rgba(255, 255, 255, 0.55);
+  cursor: pointer;
+  transition: width 160ms cubic-bezier(0.22, 1, 0.36, 1), height 160ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@media (hover: hover) and (pointer: fine) {
+  input[type="range"].np-fader:hover::-webkit-slider-thumb { width: 17px; height: 17px; }
+  input[type="range"].np-fader:hover::-moz-range-thumb { width: 17px; height: 17px; }
+}
+input[type="range"].np-fader:active::-webkit-slider-thumb,
+input[type="range"].np-fader:focus-visible::-webkit-slider-thumb {
+  width: 17px;
+  height: 17px;
+  box-shadow:
+    0 1px 5px rgba(0, 0, 0, 0.35),
+    0 0 0 5px rgba(255, 255, 255, 0.16),
+    0 0 16px rgba(255, 255, 255, 0.75);
+}
+input[type="range"].np-fader:active::-moz-range-thumb,
+input[type="range"].np-fader:focus-visible::-moz-range-thumb {
+  width: 17px;
+  height: 17px;
+  box-shadow:
+    0 1px 5px rgba(0, 0, 0, 0.35),
+    0 0 0 5px rgba(255, 255, 255, 0.16),
+    0 0 16px rgba(255, 255, 255, 0.75);
+}
+
+/* Playful volume slider avatar: transform / opacity are written
+   every frame by the spring loop in PlayfulVolume (App.tsx) —
+   no CSS transition here, it would fight the spring. */
+.vol-avatar {
+  will-change: transform, opacity;
+}
+
+/* Volume level label (Low / Medium / High / Extra high): the
+   span is re-keyed per label in App.tsx, so this animation runs
+   fresh on every change — a crossfade + pop with a springy
+   overshoot curve, matching the video. */
+@keyframes vol-label-pop {
+  0% { opacity: 0; transform: translateY(5px) scale(0.88); }
+  60% { opacity: 1; transform: translateY(-1px) scale(1.06); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+.vol-label {
+  animation: vol-label-pop 300ms cubic-bezier(0.34, 1.4, 0.64, 1) both;
+  will-change: transform, opacity;
+}
+
+/* Lyrics word reveal (Text Generate Effect values, CSS-driven):
+   when a line becomes the active line, LyricLines adds .lyr-gen
+   to its word spans and each word fades from blur(10px) /
+   opacity 0 to clear with the Aceternity source's 0.2s stagger
+   (--wi = word index, set inline by LyricLines) and 0.5s
+   duration. Opacity and filter are layout-free, and the spans
+   are the same mounted elements in every state — a line's
+   wrapped height is fixed from first paint and cannot reflow
+   when the line lights up mid-playback. */
+@keyframes lyr-word-in {
+  from { opacity: 0; filter: blur(10px); }
+  to { opacity: 1; filter: blur(0px); }
+}
+.lyr-gen {
+  animation: lyr-word-in 500ms ease both;
+  animation-delay: calc(var(--wi, 0) * 200ms);
+}
+
+/* Transport press for the Now Playing spec: scale(0.9). */
+.np-press {
+  transition: transform 130ms cubic-bezier(0.22, 1, 0.36, 1), filter 200ms cubic-bezier(0.22, 1, 0.36, 1), color 150ms ease-out;
+}
+.np-press:active { transform: scale(0.9); }
+@media (hover: hover) and (pointer: fine) {
+  .np-press:hover { filter: brightness(1.18); }
+}
+
+/* Liquid morph poster transition (reference video, 21 Nov):
+   the title under the morphing poster card slides/crossfades in
+   the direction of the switch — next pushes the old title out to
+   the left as the new one enters from the right, previous
+   mirrors it. The artwork melt itself is driven per-frame in
+   LiquidArt (App.tsx) with an SVG turbulence displacement +
+   wavy clip wipe, so only the title layers live here. */
+@keyframes title-in-next {
+  from { opacity: 0; transform: translateX(24px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes title-out-next {
+  from { opacity: 1; transform: translateX(0); }
+  to { opacity: 0; transform: translateX(-24px); }
+}
+@keyframes title-in-prev {
+  from { opacity: 0; transform: translateX(-24px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes title-out-prev {
+  from { opacity: 1; transform: translateX(0); }
+  to { opacity: 0; transform: translateX(24px); }
+}
+.title-in-next { animation: title-in-next 460ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.title-out-next { animation: title-out-next 460ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.title-in-prev { animation: title-in-prev 460ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.title-out-prev { animation: title-out-prev 460ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* Ambient background crossfade on track change (800ms ease). */
+@keyframes np-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.np-fade-in {
+  animation: np-fade 800ms ease both;
+}
+
+/* Heart toggle: spring bounce when a song is liked. */
+@keyframes heart-pop {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.3); }
+  65% { transform: scale(0.92); }
+  100% { transform: scale(1); }
+}
+.np-heart-pop {
+  animation: heart-pop 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ---- Motion system (ux-motion 20 principles + Emil rules) ---- */
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.rise {
+  animation: rise-in 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.stagger > * {
+  animation: rise-in 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.stagger > *:nth-child(1) { animation-delay: 0ms; }
+.stagger > *:nth-child(2) { animation-delay: 40ms; }
+.stagger > *:nth-child(3) { animation-delay: 80ms; }
+.stagger > *:nth-child(4) { animation-delay: 120ms; }
+.stagger > *:nth-child(5) { animation-delay: 160ms; }
+.stagger > *:nth-child(6) { animation-delay: 200ms; }
+.stagger > *:nth-child(n + 7) { animation-delay: 240ms; }
+
+@keyframes pop-in {
+  from { opacity: 0; transform: scale(0.96) translateY(4px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+.pop-in {
+  animation: pop-in 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes sheet-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.sheet-in {
+  animation: sheet-in 250ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.voice-backdrop {
+  animation: fade-in 150ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes voice-pop {
+  from { opacity: 0; transform: scale(0.94) translateY(12px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+.voice-sheet {
+  animation: voice-pop 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  transform-origin: bottom center;
+}
+@keyframes mic-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.07); opacity: 0.92; }
+}
+.voice-mic {
+  animation: mic-pulse 1600ms cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+@keyframes bar-wave {
+  from { transform: scaleY(0.35); }
+  to { transform: scaleY(1); }
+}
+.voice-bar {
+  transform-origin: bottom;
+  animation: bar-wave 850ms cubic-bezier(0.65, 0, 0.35, 1) infinite alternate;
+}
+
+/* ============================================================
+   SPATIAL UI — layered depth on the frosted dusky theme.
+   Three planes only: background (fixed, above), content (flow),
+   floating controls (nav / mini-player / panels, deepest shadow).
+   Everything is transform + opacity + box-shadow. No WebGL,
+   no blur added beyond the existing glass surfaces, no layout
+   shift — depth comes from shadow, scale and tiny rotateY/X
+   driven by scroll / drag in App.tsx.
+   ============================================================ */
+/* NO perspective on this root — ever. A non-none `perspective`
+   (like transform / filter) makes the element the containing block
+   for ALL fixed-position descendants, so the bottom nav, the mini
+   player, the full player and every sheet were anchored to the
+   bottom / full height of the whole page instead of the viewport
+   and the player simply never appeared on screen. The hero cards
+   and CollectionCard tilt each carry their own perspective()
+   inside their transform string, so scene-level perspective was
+   never needed for the 3D depth. */
+.spatial-scene {
+  perspective: none;
+}
+
+/* Floating controls — the top plane. Deeper, softer shadow than
+   content cards so the bar reads as hovering over the page, plus
+   a hairline white top edge catching light. */
+.spatial-float {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    inset 0 -12px 22px rgba(0, 0, 0, 0.22),
+    0 2px 6px rgba(0, 0, 0, 0.35),
+    0 18px 38px rgba(0, 0, 0, 0.52),
+    0 32px 64px rgba(0, 0, 0, 0.28) !important;
+}
+.spatial-float-nav {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.26),
+    0 2px 6px rgba(0, 0, 0, 0.35),
+    0 20px 42px rgba(0, 0, 0, 0.55),
+    0 36px 70px rgba(0, 0, 0, 0.30) !important;
+}
+
+/* Content cards that float — albums / playlists / popular rows.
+   Resting shadow is quiet; on hover (desktop) or press the card
+   lifts 3px toward the viewer. JS tilt (CollectionCard) writes
+   rotateX/Y inline on top of this. */
+.spatial-card {
+  transform-style: preserve-3d;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.09),
+    inset 0 -14px 26px rgba(0, 0, 0, 0.42),
+    0 10px 22px rgba(0, 0, 0, 0.42),
+    0 22px 44px rgba(0, 0, 0, 0.22);
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@media (hover: hover) and (pointer: fine) {
+  .spatial-card:hover {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.14),
+      inset 0 -14px 26px rgba(0, 0, 0, 0.38),
+      0 16px 30px rgba(0, 0, 0, 0.48),
+      0 30px 56px rgba(0, 0, 0, 0.28);
+  }
+  .spatial-lift:hover {
+    transform: translateY(-3px);
+  }
+}
+.spatial-lift {
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.38), 0 20px 40px rgba(0, 0, 0, 0.20);
+}
+
+/* Hero carousel — JS (onScroll, rAF) writes perspective rotateY /
+   translateY / scale per card + a counter-shift on the cover img
+   for parallax inside the frame. This class only sets the stage:
+   preserve-3d, a deep resting shadow, and overflow clipping so
+   the scaled img never bleeds. */
+.spatial-hero-card {
+  transform-style: preserve-3d;
+  will-change: transform;
+  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.45), 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+.spatial-hero-card img {
+  will-change: transform;
+}
+
+/* Speed Dial — the ring already lives in 3D; spatial adds a floor:
+   a soft elliptical shadow under the ring that grounds the tiles,
+   and a gentle rotateX on the whole stage as it crosses the
+   viewport centre (--dial-rx written by the scroll handler). */
+.spatial-dial {
+  transform: perspective(1100px) rotateX(var(--dial-rx, 0deg));
+  transform-style: preserve-3d;
+  transition: transform 120ms linear;
+}
+.spatial-dial-floor {
+  position: absolute;
+  left: 50%;
+  bottom: 44px;
+  width: 56%;
+  height: 26px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: radial-gradient(50% 50% at 50% 50%, rgba(0, 0, 0, 0.55) 0%, rgba(0, 0, 0, 0) 70%);
+  pointer-events: none;
+}
+
+/* Desktop side panels as floating planes instead of flush bars:
+   inset from the viewport edges, rounded, bordered, deep shadow.
+   Applied only ≥1024px so the phone layout is untouched. */
+@media (min-width: 1024px) {
+  .spatial-panel-left {
+    top: 12px !important;
+    bottom: 12px !important;
+    left: 76px !important;
+    width: 224px !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    border-radius: 28px;
+    box-shadow: 0 24px 48px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.10);
+    -webkit-backdrop-filter: blur(22px) saturate(1.25);
+    backdrop-filter: blur(22px) saturate(1.25);
+  }
+  .spatial-panel-right {
+    top: 12px !important;
+    bottom: 12px !important;
+    right: 12px !important;
+    width: 344px !important;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 28px;
+    box-shadow: -18px 24px 48px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.10);
+  }
+}
+
+/* Cover cards (reference design, 20 Nov): large rounded-square
+   card, art fills the whole card, and a frosted band sits over
+   the bottom edge — title bold white, artist dimmer below it.
+   The band's backdrop blur frosts the art behind it; its top
+   hairline is the bright edge from the dusky theme. Blur area is
+   only the band strip, so a grid of cards stays cheap. */
+.cover-band {
+  background: linear-gradient(180deg, rgba(40, 40, 46, 0.42) 0%, rgba(14, 14, 17, 0.78) 100%);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  backdrop-filter: blur(16px) saturate(150%);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10);
+}
+/* Small glass play button at the cover's top-right corner —
+   frosted squircle, white triangle, soft shadow (reference). */
+.cover-play {
+  background: linear-gradient(150deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0.10) 55%, rgba(0, 0, 0, 0.18));
+  -webkit-backdrop-filter: blur(10px) saturate(1.3);
+  backdrop-filter: blur(10px) saturate(1.3);
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  color: #fff;
+}
+
+/* Full-player cover — floats above its blurred backdrop with a
+   deeper drop shadow than content cards; art view keeps the
+   screen-filling cover (no card shadow there by design). */
+.spatial-art {
+  box-shadow:
+    0 8px 18px rgba(0, 0, 0, 0.40),
+    0 28px 60px rgba(0, 0, 0, 0.58),
+    0 48px 90px rgba(0, 0, 0, 0.30) !important;
+}
+
+/* Collection header image — content plane sits below the glass
+   pills floating over it; a soft shadow line at its base sells
+   the overlap where the title card rises over the image. */
+.spatial-overlap {
+  box-shadow: 0 -18px 36px rgba(10, 10, 12, 0.55);
+}
+
+/* Stacked cover carousel (reference "Elements" sheet): the front
+   card sits centred and sharp; the cards behind it peek out on
+   both sides, smaller, slightly rotated and dimmer — depth from
+   transform + shadow only. The frosted-centre variant swaps the
+   front card's art for a blurred frost panel. */
+.stack-stage {
+  perspective: 1100px;
+  perspective-origin: 50% 45%;
+}
+.stack-card {
+  transform-style: preserve-3d;
+  transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1), opacity 320ms cubic-bezier(0.22, 1, 0.36, 1), filter 320ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+.stack-frost {
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.05) 50%, rgba(0, 0, 0, 0.20) 100%);
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+  backdrop-filter: blur(22px) saturate(160%);
+}
+@media (prefers-reduced-motion: reduce) {
+  .stack-card { transition: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rise, .stagger > *, .pop-in, .sheet-in, .voice-sheet {
+    animation: fade-in 120ms ease-out both;
+  }
+  .voice-mic, .voice-bar {
+    animation: none;
+  }
+  /* Liquid Glass refactor: no ambient drift, no equaliser bounce,
+     no morph — the player still fades in, the art still shows its
+     playing/paused shadow but never scales. */
+  .player-in {
+    animation: fade-in 120ms ease-out both;
+  }
+  .ambient-img, .tint-drift {
+    animation: none;
+    will-change: auto;
+  }
+  .eq-bar { animation: none; transform: scaleY(0.7); }
+  .living-art { transition: none; }
+  .living-art.is-paused { transform: none; }
+  .lg-press { transition: none; }
+  .lg-press:active { transform: none; }
+  input[type="range"].fader { transition: none; }
+  /* Now Playing redesign: no crossfade, no heart bounce, no
+     press scale under reduced motion. */
+  .np-fade-in { animation: none; }
+  .np-heart-pop { animation: none; }
+  /* Liquid morph: no title slide under reduced motion (the
+     artwork swap itself is instant — handled in LiquidArt). */
+  .title-in-next, .title-out-next, .title-in-prev, .title-out-prev { animation: none; }
+  .vol-avatar { will-change: auto; }
+  .vol-label { animation: none; will-change: auto; }
+  /* Lyrics reveal: words simply show under reduced motion. */
+  .lyr-gen { animation: none; }
+  .np-press { transition: none; }
+  .np-press:active { transform: none; }
+  input[type="range"].np-fader::-webkit-slider-thumb,
+  input[type="range"].np-fader::-moz-range-thumb { transition: none; }
+  /* Spatial: no parallax drift, no tilt transitions — depth stays
+     in the static shadows only. JS handlers also check this. */
+  .app-bg::before, .app-bg::after { transform: none; will-change: auto; }
+  .spatial-dial { transform: none; transition: none; }
+  .spatial-card, .spatial-lift, .spatial-hero-card { transition: none; will-change: auto; }
+  .spatial-hero-card img { will-change: auto; }
+}
+
+/* ============================================================
+   SHINY BUTTON (user-supplied component source, 21 Nov 2026) —
+   the source ships this CSS in a Next.js <style jsx> block;
+   it lives here instead, values verbatim: conic-gradient
+   rotating border driven by registered @property angles, dots
+   pattern, inner shimmer, breathe glow, 3s gradient-angle
+   cycle, hover/focus expanding --gradient-percent to 20% and
+   --gradient-angle-offset to 95deg, press translate 0 1px.
+   The rules sit in the components layer so Tailwind sizing
+   utilities at call sites (px-4 py-1.5 text-[11px]…) override
+   the source's large-CTA padding / font-size and the button
+   works at pill size. Palette (21 Nov, user request): the
+   animation and motion are unchanged, but the source's black
+   base / blue highlight read oddly over the app's shifting
+   ambient gradients, so the colours are now a frosted white
+   and grey material — translucent white fill with backdrop
+   blur, charcoal text, and a silver-grey rotating shine.
+   @property + @keyframes must stay top-level (they are
+   ignored inside cascade layers).
+   ============================================================ */
+@property --gradient-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+@property --gradient-angle-offset {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+@property --gradient-percent {
+  syntax: "<percentage>";
+  initial-value: 5%;
+  inherits: false;
+}
+@property --gradient-shine {
+  syntax: "<color>";
+  initial-value: white;
+  inherits: false;
+}
+@keyframes gradient-angle {
+  to {
+    --gradient-angle: 360deg;
+  }
+}
+@keyframes shimmer {
+  to {
+    rotate: 360deg;
+  }
+}
+@keyframes breathe {
+  from, to {
+    scale: 1;
+  }
+  50% {
+    scale: 1.2;
+  }
+}
+@layer components {
+  .shiny-cta {
+    --shiny-cta-bg: rgba(243, 243, 246, 0.82);
+    --shiny-cta-bg-subtle: rgba(148, 148, 158, 0.45);
+    --shiny-cta-fg: #232329;
+    --shiny-cta-highlight: #83838d;
+    --shiny-cta-highlight-subtle: #ffffff;
+    --animation: gradient-angle linear infinite;
+    --duration: 3s;
+    --shadow-size: 2px;
+    --transition: 800ms cubic-bezier(0.25, 1, 0.5, 1);
+
+    isolation: isolate;
+    position: relative;
+    overflow: hidden;
+    cursor: pointer;
+    outline-offset: 4px;
+    padding: 1.25rem 2.5rem;
+    font-family: "Inter", sans-serif;
+    font-size: 1.125rem;
+    line-height: 1.2;
+    font-weight: 500;
+    border: 1px solid transparent;
+    border-radius: 360px;
+    color: var(--shiny-cta-fg);
+    background: linear-gradient(155deg, rgba(255, 255, 255, 0.94), rgba(233, 233, 237, 0.82) 52%, rgba(203, 203, 211, 0.78)) padding-box,
+      conic-gradient(
+        from calc(var(--gradient-angle) - var(--gradient-angle-offset)),
+        transparent,
+        var(--shiny-cta-highlight) var(--gradient-percent),
+        var(--gradient-shine) calc(var(--gradient-percent) * 2),
+        var(--shiny-cta-highlight) calc(var(--gradient-percent) * 3),
+        transparent calc(var(--gradient-percent) * 4)
+      ) border-box;
+    -webkit-backdrop-filter: blur(14px) saturate(150%);
+    backdrop-filter: blur(14px) saturate(150%);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.95),
+      inset 0 0 0 1px var(--shiny-cta-bg-subtle),
+      0 6px 18px rgba(0, 0, 0, 0.20),
+      0 2px 6px rgba(0, 0, 0, 0.12);
+    transition: var(--transition);
+    transition-property: --gradient-angle-offset, --gradient-percent, --gradient-shine;
+  }
+
+  .shiny-cta::before,
+  .shiny-cta::after,
+  .shiny-cta span::before {
+    content: "";
+    pointer-events: none;
+    position: absolute;
+    inset-inline-start: 50%;
+    inset-block-start: 50%;
+    translate: -50% -50%;
+    z-index: -1;
+  }
+
+  .shiny-cta:active {
+    translate: 0 1px;
+  }
+
+  /* Dots pattern */
+  .shiny-cta::before {
+    --size: calc(100% - var(--shadow-size) * 3);
+    --position: 2px;
+    --space: calc(var(--position) * 2);
+    width: var(--size);
+    height: var(--size);
+    background: radial-gradient(
+      circle at var(--position) var(--position),
+      rgba(84, 84, 94, 0.85) calc(var(--position) / 4),
+      transparent 0
+    ) padding-box;
+    background-size: var(--space) var(--space);
+    background-repeat: space;
+    mask-image: conic-gradient(
+      from calc(var(--gradient-angle) + 45deg),
+      black,
+      transparent 10% 90%,
+      black
+    );
+    border-radius: inherit;
+    opacity: 0.4;
+    z-index: -1;
+  }
+
+  /* Inner shimmer */
+  .shiny-cta::after {
+    --animation: shimmer linear infinite;
+    width: 100%;
+    aspect-ratio: 1;
+    background: linear-gradient(
+      -50deg,
+      transparent,
+      var(--shiny-cta-highlight),
+      transparent
+    );
+    mask-image: radial-gradient(circle at bottom, transparent 40%, black);
+    opacity: 0.6;
+  }
+
+  .shiny-cta span {
+    z-index: 1;
+  }
+
+  .shiny-cta span::before {
+    --size: calc(100% + 1rem);
+    width: var(--size);
+    height: var(--size);
+    box-shadow: inset 0 -1ex 2rem 4px var(--shiny-cta-highlight);
+    opacity: 0;
+    transition: opacity var(--transition);
+    animation: calc(var(--duration) * 1.5) breathe linear infinite;
+  }
+
+  /* Animate */
+  .shiny-cta,
+  .shiny-cta::before,
+  .shiny-cta::after {
+    animation: var(--animation) var(--duration),
+      var(--animation) calc(var(--duration) / 0.4) reverse paused;
+    animation-composition: add;
+  }
+
+  .shiny-cta:is(:hover, :focus-visible) {
+    --gradient-percent: 20%;
+    --gradient-angle-offset: 95deg;
+    --gradient-shine: var(--shiny-cta-highlight-subtle);
+  }
+
+  .shiny-cta:is(:hover, :focus-visible),
+  .shiny-cta:is(:hover, :focus-visible)::before,
+  .shiny-cta:is(:hover, :focus-visible)::after {
+    animation-play-state: running;
+  }
+
+  .shiny-cta:is(:hover, :focus-visible) span::before {
+    opacity: 1;
+  }
+}
+/* The source has no reduced-motion handling; the app norm (and
+   the check for this component) is that the shine holds still. */
+@media (prefers-reduced-motion: reduce) {
+  .shiny-cta,
+  .shiny-cta::before,
+  .shiny-cta::after,
+  .shiny-cta span::before {
+    animation: none;
+  }
+}
