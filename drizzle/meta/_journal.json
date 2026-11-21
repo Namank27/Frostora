@@ -1,0 +1,62 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1795171363831,
+      "tag": "0001_initial",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1795171363831,
+      "tag": "0002_liked_tracks_replace_entries",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1795172499735,
+      "tag": "0003_add_listening_history",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1795174578347,
+      "tag": "0004_profile_and_history_duration",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1795188467372,
+      "tag": "0005_add_wallpaper_to_profile",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1795279231438,
+      "tag": "0006_add_hidden_playlists",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1795279231438,
+      "tag": "0007_add_user_playlists",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1795288140289,
+      "tag": "0008_device_scoping",
+      "breakpoints": true
+    }
+  ]
+}
