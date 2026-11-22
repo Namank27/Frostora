@@ -3,6 +3,43 @@
 Phone-first music app (Frostora) wrapped as an installable Android APK using
 **Capacitor 7** (a WebView shell around the deployed web app).
 
+## v1.0.1 — background audio + volume sync (native)
+
+- **Background play:** a local Capacitor plugin, `FrostoraAudio`
+  (`android/app/src/main/java/com/frostora/app/FrostoraAudioPlugin.java`),
+  drives `MediaPlaybackService` — a foreground service of type
+  `mediaPlayback` with a MediaSession + MediaStyle notification.
+  The web app (`client/src/nativeAudio.ts`, wired in `App.tsx`)
+  starts it when a track plays, updates its metadata / playing
+  state as tracks change, and receives the notification's
+  play / pause / next / previous buttons back as
+  `playbackAction` events. Declared in `AndroidManifest.xml`
+  (`foregroundServiceType="mediaPlayback"`); `MainActivity`
+  requests `POST_NOTIFICATIONS` on Android 13+ so the
+  notification can appear. `build-apk.sh` re-applies the service
+  declaration, the permission and the `MainActivity` registration
+  on every build, so a fresh `cap sync` cannot lose them.
+- **Volume, both ways:** the same plugin talks to the Android
+  `AudioManager` music stream — `getVolume` / `setVolume`, plus
+  a `VOLUME_CHANGED_ACTION` listener that emits `volumeChange`
+  events. The in-app slider sets the phone's media volume and
+  the hardware keys move the in-app slider (and the player);
+  `App.tsx` keeps slider == system volume == player volume.
+- **Why a local plugin:** the maintained
+  `@capawesome/capacitor-volume` needs Capacitor >= 8 (this
+  wrapper is on Capacitor 7) and `@jofr/capacitor-media-session`
+  is unreleased since Aug 2024 (v4.0.0, Capacitor 6 peer). No new
+  npm dependency was added, so `.github/workflows/android-apk.yml`
+  is unchanged. Upgrading the wrapper to Capacitor 8 to use the
+  Capawesome volume plugin is the alternative path — see
+  `V101-REBUILD-NOTES.md` at the repo root.
+- **Honest limit:** playback still lives in the WebView's YouTube
+  iframe — the service keeps the app process alive, it does not
+  move decoding into native ExoPlayer (the iframe exposes no
+  stream to native code). If Android ever suspends the WebView
+  mid-track, the current song can stall until the app is
+  foregrounded again.
+
 ## Status (22 Nov 2026)
 
 **No APK has been built yet — one input is still missing, and it is not optional:**

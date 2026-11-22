@@ -121,9 +121,23 @@ for perm in [
     "android.permission.WAKE_LOCK",
     "android.permission.FOREGROUND_SERVICE",
     "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+    # v1.0.1: the background-audio service posts its Now Playing
+    # notification through this (Android 13+).
+    "android.permission.POST_NOTIFICATIONS",
 ]:
     if perm not in s:
         s = s.replace("<application", f'    <uses-permission android:name="{perm}" />\n    <application', 1)
+# v1.0.1: declare the background-audio foreground service (media
+# playback type) if it is not already in the manifest.
+if "MediaPlaybackService" not in s:
+    s = s.replace(
+        "        </activity>",
+        '        </activity>\n\n'
+        '        <service android:name=".MediaPlaybackService"\n'
+        '            android:exported="false"\n'
+        '            android:foregroundServiceType="mediaPlayback" />',
+        1,
+    )
 open(p, "w").write(s)
 print("manifest permissions ok")
 PY
@@ -131,22 +145,45 @@ PY
 MAIN=$(find android/app/src/main -name MainActivity.* | head -1)
 echo "MainActivity: $MAIN"
 # Capacitor generates a one-line MainActivity with no onCreate, so write the
-# full file: same class, plus WebView settings for YouTube playback.
+# full file: same class, plus WebView settings for YouTube playback, the
+# FrostoraAudio plugin registration (v1.0.1, BEFORE super.onCreate —
+# registerPlugin only adds to the bridge builder) and the
+# POST_NOTIFICATIONS runtime request for the background-audio service.
 cat > "$MAIN" <<'JAVA'
 package com.frostora.app;
 
+import android.Manifest;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
+
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
+
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
+    private static final int NOTIFICATION_PERMISSION_REQUEST = 1001;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        registerPlugin(FrostoraAudioPlugin.class);
         super.onCreate(savedInstanceState);
         // Frostora streams YouTube Music: allow media without a tap.
         android.webkit.WebSettings ws = this.bridge.getWebView().getSettings();
         ws.setMediaPlaybackRequiresUserGesture(false);
         ws.setDomStorageEnabled(true);
         ws.setMixedContentMode(android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+        // v1.0.1: the background-audio foreground service shows its
+        // Now Playing notification through this permission (Android 13+).
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                        != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(
+                    this,
+                    new String[] { Manifest.permission.POST_NOTIFICATIONS },
+                    NOTIFICATION_PERMISSION_REQUEST);
+        }
     }
 }
 JAVA

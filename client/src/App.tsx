@@ -2,6 +2,16 @@ import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, 
 import { createPortal } from "react-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, getProfileName, setProfileName, type ApiResponse } from "./api";
+import {
+  getNativeVolume,
+  isNativeApp,
+  onNativePlaybackAction,
+  setNativePlaying,
+  setNativeVolume,
+  startBackgroundAudio,
+  updateNativeMetadata,
+  watchNativeVolume,
+} from "./nativeAudio";
 import { FIELDS } from "./fields";
 import LiquidGlassHeroDemo from "./components/liquid-glass-hero-demo";
 import TextGenerateEffectDemo from "./components/text-generate-effect-demo";
@@ -574,19 +584,21 @@ function EqBars() {
 }
 
 /* About-page Feedback pill: a frosted pill that morphs into a
-   text input and posts the note straight from the browser to
-      Web3Forms (https://api.web3forms.com/submit), which emails the
-         note to the creator. The server-side send was blocked by
-            Web3Forms on the free plan (server calls get 403), so the pill
-               sends from the browser instead. The key comes from
-                  import.meta.env.VITE_WEB3FORMS_ACCESS_KEY. Web3Forms keys are
-                     public by design, so the key may appear in this bundle.
-                        No email is asked of the person writing; the message is all
-                           that is sent. States: pill → input (a spinner rides the arrow
-                              button while sending) → "Thanks for your thoughts!" → back to
-                                 the pill after 3 seconds. A failed send keeps the typed text
-                                    and shows a short retry line under the pill. The morph itself
-                                       is the .feedback-morph width/height transition in theme.css. */
+   text input and sends the note straight from the browser to
+   Web3Forms (it emails the note to the creator). 22 Nov: the
+   server-side send was blocked by Web3Forms on the free plan —
+   server calls get 403 "This method is not allowed", so the pill
+   now posts client-side, which is Web3Forms' own documented
+   pattern. The key comes from import.meta.env.VITE_WEB3FORMS_ACCESS_KEY
+   (set in Vercel, Production); Web3Forms keys are public by design
+   — they identify the inbox, they don't authenticate anyone — so
+   shipping it in the bundle is how Web3Forms is meant to be used.
+   No email is asked of the person writing; the message is all
+   that is sent. States: pill → input (a spinner rides the arrow
+   button while sending) → "Thanks for your thoughts!" → back to
+   the pill after 3 seconds. A failed send keeps the typed text
+   and shows a short retry line under the pill. The morph itself
+   is the .feedback-morph width/height transition in theme.css. */
 function FeedbackPill() {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
@@ -613,25 +625,25 @@ function FeedbackPill() {
     setSending(true);
     setFailed(false);
     try {
-            const key = import.meta.env.VITE_WEB3FORMS_ACCESS_KEY as string | undefined;
-            if (!key) throw new Error("Feedback is not configured yet");
-            const res = await fetch("https://api.web3forms.com/submit", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json", Accept: "application/json" },
-                      body: JSON.stringify({
-                                  access_key: key,
-                                  subject: "New Frostora Feedback",
-                                  message,
-                                  botcheck: "",
-                      }),
-            });
-            const data: unknown = await res.json().catch(() => null);
-            const ok =
-                      res.ok &&
-                      typeof data === "object" &&
-                      data !== null &&
-                      (data as { success?: unknown }).success === true;
-            if (!ok) throw new Error("Feedback send failed");
+      const key = import.meta.env.VITE_WEB3FORMS_ACCESS_KEY as string | undefined;
+      if (!key) throw new Error("Feedback is not configured yet");
+      const res = await fetch("https://api.web3forms.com/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({
+          access_key: key,
+          subject: "New Frostora Feedback",
+          message,
+          botcheck: "",
+        }),
+      });
+      const data: unknown = await res.json().catch(() => null);
+      const ok =
+        res.ok &&
+        typeof data === "object" &&
+        data !== null &&
+        (data as { success?: unknown }).success === true;
+      if (!ok) throw new Error("Feedback send failed");
       setSent(true);
       resetTimer.current = window.setTimeout(() => {
         setSent(false);
@@ -1431,6 +1443,14 @@ function SpeedDial({
   // screen at all — the rAF loop below does no style writes while
   // the carousel is scrolled out of view.
   const shadowBucketRef = useRef<number[]>([]);
+  // v1.0.1: the auto-spin fast path (paintAuto, below) writes
+  // transform every frame but only touches the paint-expensive
+  // properties (opacity / visibility / zIndex / shade / shadow)
+  // when a tile's coarse depth bucket changes — during the slow
+  // auto-spin drift (3.5°/s) a tile's depth barely moves, so most
+  // frames become transform-only, GPU-composited writes.
+  const tileBucketRef = useRef<number[]>([]);
+  const lastAutoPaintRef = useRef(0);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const onScreenRef = useRef(true);
   const occludedRef = useRef(occluded);
@@ -1461,6 +1481,10 @@ function SpeedDial({
       el.style.opacity = visible ? `${0.35 + 0.65 * Math.pow(depth, 0.7)}` : "0";
       el.style.visibility = visible ? "visible" : "hidden";
       el.style.zIndex = `${Math.round(30 - abs * 6)}`;
+      // Keep the auto-spin bucket cache in sync (v1.0.1): paint()
+      // writes every property, so the cache must reflect the new
+      // state or paintAuto() could later skip a write it owes.
+      tileBucketRef.current[i] = visible ? Math.round(depth * 8) : -1;
       const inner = innerRefs.current[i];
       if (inner) {
         inner.style.transform = "";
@@ -1479,6 +1503,58 @@ function SpeedDial({
       }
       const shade = shadeRefs.current[i];
       if (shade) shade.style.opacity = `${Math.min(0.4, abs * 0.2)}`;
+    }
+    if (slotCount > 0) {
+      const f = ((Math.round(-angle / step) % slotCount) + slotCount) % slotCount;
+      if (f !== frontRef.current) {
+        frontRef.current = f;
+        setFrontSlot(f);
+      }
+    }
+  }, [slotCount, step]);
+
+  /* Auto-spin fast path (v1.0.1): same geometry as paint(), but
+     during the slow idle drift only the transform is written per
+     frame — opacity / visibility / zIndex / shade / shadow are
+     re-written only when a tile's coarse depth bucket changes
+     (8 steps), which happens a few times a second at most while
+     auto-spinning. Dragging, flinging and spin-to-tile keep using
+     the full paint() above, so their feel is byte-identical. */
+  const paintAuto = useCallback(() => {
+    const angle = angleRef.current;
+    const frontFloat = step > 0 ? -angle / step : 0;
+    for (let i = 0; i < slotCount; i++) {
+      const el = tileRefs.current[i];
+      if (!el) continue;
+      let offset = i - frontFloat;
+      offset = ((offset % slotCount) + slotCount) % slotCount;
+      if (offset > slotCount / 2) offset -= slotCount;
+      const abs = Math.abs(offset);
+      const visible = abs <= 2.35;
+      const depth = Math.max(0, 1 - abs / 2.6);
+      const scale = 1 - Math.min(abs, 2.35) * 0.13;
+      el.style.transform = `translateX(${Math.round(offset * SPACING)}px) scale(${scale.toFixed(3)}) rotateY(${Math.round(offset * -13)}deg)`;
+      // Coarse bucket: -1 = hidden, else depth in 8 steps. Only
+      // when it changes do the paint-expensive writes happen.
+      const bucket = visible ? Math.round(depth * 8) : -1;
+      if (tileBucketRef.current[i] !== bucket) {
+        tileBucketRef.current[i] = bucket;
+        el.style.opacity = visible ? `${0.35 + 0.65 * Math.pow(depth, 0.7)}` : "0";
+        el.style.visibility = visible ? "visible" : "hidden";
+        el.style.zIndex = `${Math.round(30 - abs * 6)}`;
+        const inner = innerRefs.current[i];
+        if (inner) {
+          inner.style.transform = "";
+          const sBucket = Math.round(depth * 12);
+          if (shadowBucketRef.current[i] !== sBucket) {
+            shadowBucketRef.current[i] = sBucket;
+            const d = sBucket / 12;
+            inner.style.boxShadow = `0 ${Math.round(10 + d * 16)}px ${Math.round(20 + d * 26)}px rgba(0,0,0,${(0.18 + d * 0.34).toFixed(2)})`;
+          }
+        }
+        const shade = shadeRefs.current[i];
+        if (shade) shade.style.opacity = `${Math.min(0.4, abs * 0.2)}`;
+      }
     }
     if (slotCount > 0) {
       const f = ((Math.round(-angle / step) % slotCount) + slotCount) % slotCount;
@@ -1520,15 +1596,23 @@ function SpeedDial({
           velRef.current *= Math.pow(0.94, dt / 16.7);
           paint();
         } else if (!reducedMotion.current) {
+          // Idle auto-spin (v1.0.1): the drift is only 3.5°/s, so
+          // painting at ~30fps is visually identical and halves
+          // the per-frame work — and paintAuto() makes those
+          // frames transform-only (see above). Drag / fling /
+          // spin-to still paint every frame via paint().
           angleRef.current -= dt * 0.0035;
-          paint();
+          if (now - lastAutoPaintRef.current >= 32) {
+            lastAutoPaintRef.current = now;
+            paintAuto();
+          }
         }
       }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [paint]);
+  }, [paint, paintAuto]);
 
   // Track whether the dial is anywhere near the viewport; the
   // paint loop above idles while it isn't.
@@ -5043,6 +5127,12 @@ export function App() {
         /* player mid-rebuild; onReady re-applies volumeRef */
       }
     }
+    // v1.0.1 (APK only): the in-app slider also moves the phone's
+    // media volume, so slider == system volume == player volume.
+    // No-op on the web build. The native volumeChange listener
+    // below echoes back the same value, which the >1 guard there
+    // drops, so a slider drag can never loop.
+    void setNativeVolume(v / 100);
   };
 
   // Reload the player with a different video for the SAME song
@@ -5415,15 +5505,20 @@ export function App() {
 
   /* ----- Media Session: the phone's own media controls -----
      Browsers expose NO API to read or set the phone's system
-     volume, so the in-app slider cannot move the system volume
-     bar itself (only a native app can). What the web CAN do —
-     and what this wires up — is register with the OS media
-     session: the lock-screen / notification controls then show
-     this song and drive play / pause / next / previous / seek,
-     the phone's media volume keys act on the playing media
-     stream while it plays, and the in-app slider is kept equal
-     to the player's real playback volume (applyVolume sets it,
-     the poll reads it back). */
+     volume, so on the WEB the in-app slider cannot move the
+     system volume bar itself (only a native app can). What the
+     web CAN do — and what this wires up — is register with the
+     OS media session: the lock-screen / notification controls
+     then show this song and drive play / pause / next / previous
+     / seek, the phone's media volume keys act on the playing
+     media stream while it plays, and the in-app slider is kept
+     equal to the player's real playback volume (applyVolume sets
+     it, the poll reads it back).
+     v1.0.1: inside the Android APK the native FrostoraAudio
+     plugin (see the effect below) removes both limits — the
+     slider drives the system volume, the hardware keys drive
+     the slider, and a foreground service keeps audio playing
+     in the background. */
   useEffect(() => {
     if (!("mediaSession" in navigator)) return;
     const ms = navigator.mediaSession;
@@ -5464,6 +5559,58 @@ export function App() {
     };
   }, []);
 
+  /* ----- Native audio (APK only, v1.0.1) -----
+     Inside the Capacitor wrapper the web Media Session above does
+     not exist (Android WebView has no Media Session API), so the
+     native FrostoraAudio plugin takes over the same job — and two
+     things the web can never do:
+     (a) Volume, both ways: on mount, pull the phone's media
+         volume into the slider once; then listen for hardware
+         volume-key changes and move the slider (and the player,
+         via applyVolume) to match. The slider's own drags push
+         the other way via applyVolume → setNativeVolume. The >1
+         guard drops the echo of our own sets, so the two can
+         never chase each other.
+     (b) Lock-screen transport: the notification's play / pause /
+         next / previous buttons arrive as playbackAction events
+         and drive the same handlers as the web session above.
+     Everything here is a no-op on the web build (isNativeApp()
+     is false, and every nativeAudio call guards on it). */
+  useEffect(() => {
+    if (!isNativeApp()) return;
+    let stopVolume: (() => void) | undefined;
+    let stopActions: (() => void) | undefined;
+    let cancelled = false;
+    void getNativeVolume().then((v) => {
+      if (cancelled || v === null) return;
+      const pct = Math.round(v * 100);
+      if (Math.abs(pct - volumeRef.current) > 1) applyVolume(pct);
+    });
+    void watchNativeVolume((v) => {
+      const pct = Math.round(v * 100);
+      if (Math.abs(pct - volumeRef.current) > 1) applyVolume(pct);
+    }).then((stop) => {
+      if (cancelled) stop();
+      else stopVolume = stop;
+    });
+    void onNativePlaybackAction((action) => {
+      if (action === "play" && !stateRef.current.playing) togglePlayPauseRef.current();
+      else if (action === "pause" && stateRef.current.playing) togglePlayPauseRef.current();
+      else if (action === "next") stepRef.current(1);
+      else if (action === "previous") stepRef.current(-1);
+    }).then((stop) => {
+      if (cancelled) stop();
+      else stopActions = stop;
+    });
+    return () => {
+      cancelled = true;
+      stopVolume?.();
+      stopActions?.();
+    };
+    // applyVolume is stable by construction (only refs + setState);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const msVideoId = current?.videoId;
   const msTitle = current?.title;
   const msArtist = current?.artist;
@@ -5491,6 +5638,27 @@ export function App() {
       navigator.mediaSession.playbackState = current ? (playing ? "playing" : "paused") : "none";
     } catch {
       /* playbackState not supported here */
+    }
+  }, [playing, current]);
+
+  /* ----- Native background audio (APK only, v1.0.1) -----
+     Mirror the same playing/track state into the native
+     foreground service: while a track is playing the service
+     (mediaPlayback type + MediaSession + notification) keeps
+     the app process alive, so the YouTube audio keeps playing
+     when the app is minimised or the screen locks. Pausing
+     keeps the service up with a paused state, so the
+     notification's Play button can resume it. No-op on web. */
+  useEffect(() => {
+    if (!isNativeApp()) return;
+    if (!current) return;
+    const meta = { title: current.title, artist: current.artist, album: current.album };
+    if (playing) {
+      void startBackgroundAudio(meta);
+      void setNativePlaying(true);
+    } else {
+      void updateNativeMetadata(meta);
+      void setNativePlaying(false);
     }
   }, [playing, current]);
 

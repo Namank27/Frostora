@@ -1260,6 +1260,50 @@ async function innertubeBrowseLive(browseId: string): Promise<unknown> {
   return res.json();
 }
 
+/* Playlist pagination (v1.0.1): a YouTube Music playlist browse
+   returns only the first page (~100 tracks) plus a
+   continuationItemRenderer holding a token for the next page.
+   Follow that token with a /browse call carrying `continuation`
+   instead of a browseId; each continuation payload has the same
+   shape (musicPlaylistShelfContinuation contents + a further
+   token, if more pages remain). Continuations are NOT cached —
+   the tokens are single-use page cursors, not stable feed data. */
+function findContinuationToken(node: unknown): string | null {
+  if (Array.isArray(node)) {
+    for (const v of node) {
+      const t = findContinuationToken(v);
+      if (t) return t;
+    }
+    return null;
+  }
+  const obj = asObj(node);
+  if (!obj) return null;
+  const cmd = asObj(obj["continuationCommand"]);
+  if (cmd && typeof cmd["token"] === "string" && cmd["token"]) return cmd["token"];
+  for (const v of Object.values(obj)) {
+    const t = findContinuationToken(v);
+    if (t) return t;
+  }
+  return null;
+}
+
+async function innertubeBrowseContinuation(token: string): Promise<unknown> {
+  const res = await fetchUpstream(
+    `https://music.youtube.com/youtubei/v1/browse?key=${INNERTUBE_KEY}&prettyPrint=false`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+      },
+      body: JSON.stringify({ context: INNERTUBE_CTX, continuation: token }),
+    },
+  );
+  if (!res.ok) throw new Error(`YouTube Music browse continuation failed (HTTP ${res.status})`);
+  return res.json();
+}
+
 function headerText(col: unknown): string {
   const c = asObj(col);
   if (!c) return "";
@@ -2003,7 +2047,30 @@ async function fetchYouTubePlaylist(listId: string): Promise<FetchedPlaylist> {
   const title = h ? headerText(h["title"]).trim() : "";
   const sections: FeedSections = { songs: [], cards: [] };
   collectFeed(data, "", sections);
-  const tracks = dedupeTracks(sections.songs.map((s) => s.track)).slice(0, 200);
+  // v1.0.1: the first browse page holds only ~100 tracks. Follow
+  // continuation tokens page by page (collectFeed already extracts
+  // musicResponsiveListItemRenderer tracks from continuation
+  // payloads too) until the playlist ends or the cap is reached.
+  // A failed/late page keeps the tracks already collected instead
+  // of failing the whole import.
+  const MAX_YOUTUBE_IMPORT_TRACKS = 500;
+  const MAX_CONTINUATION_PAGES = 8;
+  let token = findContinuationToken(data);
+  let pages = 0;
+  while (token && sections.songs.length < MAX_YOUTUBE_IMPORT_TRACKS && pages < MAX_CONTINUATION_PAGES) {
+    pages += 1;
+    let page: unknown;
+    try {
+      page = await innertubeBrowseContinuation(token);
+    } catch {
+      break;
+    }
+    const before = sections.songs.length;
+    collectFeed(page, "", sections);
+    if (sections.songs.length <= before) break;
+    token = findContinuationToken(page);
+  }
+  const tracks = dedupeTracks(sections.songs.map((s) => s.track)).slice(0, MAX_YOUTUBE_IMPORT_TRACKS);
   if (!title && tracks.length === 0) {
     throw new Error("Playlist not found or not public.");
   }
@@ -2084,6 +2151,13 @@ async function fetchSpotifyPlaylistLive(playlistId: string): Promise<FetchedSpot
     }
   }
   if (!title && seeds.length === 0) throw new Error("Playlist not found or not public.");
+  // v1.0.1: Spotify stays capped at 100 — the public embed page
+  // this scraper reads only ever exposes the first 100 tracks of a
+  // playlist in its __NEXT_DATA__ payload; there is no second page
+  // to follow. Going past 100 would need Spotify developer
+  // credentials (the Spotify Web API) — deliberately NOT faked
+  // here, so a >100-track Spotify playlist imports only its first
+  // 100 matched tracks (the preview's track count says so).
   return { title: title || "Spotify playlist", thumbnail, seeds: seeds.slice(0, 100) };
 }
 
@@ -3689,7 +3763,8 @@ export const Actions = {
   },
 
   updateProfile: {
-    description: "Saves the user's editable profile bio. The display name is NOT stored here — it lives only on the user's own device (localStorage, default 'user'); displayName is still accepted for compatibility but is ignored.",
+    description:
+      "Saves the user's bio. The display name is NOT stored here — it lives only on the user's own device (localStorage, default 'user'), so it can never leak across devices. displayName is still accepted for compatibility but is ignored.",
     request: z.object({
       displayName: z.string().trim().min(1).max(40),
       bio: z.string().trim().max(160),
