@@ -580,12 +580,17 @@ function MetalFallbackButton({
      metal for the exact control the theme already uses. */
   if (variant === "play") {
     return (
-      <span className="flex h-full w-full items-center justify-center">
+      <span className="relative flex h-full w-full items-center justify-center">
+        <span
+          className="play-rim-glow"
+          aria-hidden="true"
+          style={{ width: diameter + 12, height: diameter + 12 }}
+        />
         <button
           type="button"
           onClick={onClick}
           aria-label={text}
-          className="frosted-play-btn np-press flex items-center justify-center rounded-full"
+          className="frosted-play-btn np-press relative flex items-center justify-center rounded-full"
           style={{ width: diameter, height: diameter }}
         >
           {text === "Pause" ? (
