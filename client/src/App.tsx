@@ -574,16 +574,19 @@ function EqBars() {
 }
 
 /* About-page Feedback pill: a frosted pill that morphs into a
-   text input and sends the note through the submitFeedback server
-   action, which posts to Web3Forms (it emails the note to the
-   creator). The Web3Forms access key lives only on the server —
-   never in this bundle, where anyone could extract and abuse it.
-   No email is asked of the person writing; the message is all
-   that is sent. States: pill → input (a spinner rides the arrow
-   button while sending) → "Thanks for your thoughts!" → back to
-   the pill after 3 seconds. A failed send keeps the typed text
-   and shows a short retry line under the pill. The morph itself
-   is the .feedback-morph width/height transition in theme.css. */
+   text input and posts the note straight from the browser to
+      Web3Forms (https://api.web3forms.com/submit), which emails the
+         note to the creator. The server-side send was blocked by
+            Web3Forms on the free plan (server calls get 403), so the pill
+               sends from the browser instead. The key comes from
+                  import.meta.env.VITE_WEB3FORMS_ACCESS_KEY. Web3Forms keys are
+                     public by design, so the key may appear in this bundle.
+                        No email is asked of the person writing; the message is all
+                           that is sent. States: pill → input (a spinner rides the arrow
+                              button while sending) → "Thanks for your thoughts!" → back to
+                                 the pill after 3 seconds. A failed send keeps the typed text
+                                    and shows a short retry line under the pill. The morph itself
+                                       is the .feedback-morph width/height transition in theme.css. */
 function FeedbackPill() {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
@@ -610,8 +613,25 @@ function FeedbackPill() {
     setSending(true);
     setFailed(false);
     try {
-      const res = await api.submitFeedback({ message });
-      if (!res.ok) throw new Error("Feedback send failed");
+            const key = import.meta.env.VITE_WEB3FORMS_ACCESS_KEY as string | undefined;
+            if (!key) throw new Error("Feedback is not configured yet");
+            const res = await fetch("https://api.web3forms.com/submit", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json", Accept: "application/json" },
+                      body: JSON.stringify({
+                                  access_key: key,
+                                  subject: "New Frostora Feedback",
+                                  message,
+                                  botcheck: "",
+                      }),
+            });
+            const data: unknown = await res.json().catch(() => null);
+            const ok =
+                      res.ok &&
+                      typeof data === "object" &&
+                      data !== null &&
+                      (data as { success?: unknown }).success === true;
+            if (!ok) throw new Error("Feedback send failed");
       setSent(true);
       resetTimer.current = window.setTimeout(() => {
         setSent(false);
@@ -7632,7 +7652,7 @@ export function App() {
             <div className="glass mt-4 rounded-[28px] p-6">
               <h3 className="font-display text-[20px]">About the creator</h3>
               <p className="mt-3 text-[14.5px] leading-relaxed text-[var(--text)]">
-                Frostora was created by <strong>Naman</strong>.
+                &ldquo;Kya kroge jaan kr&rdquo; ~ <strong>Naman</strong>
               </p>
             </div>
 
