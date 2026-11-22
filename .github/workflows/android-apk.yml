@@ -48,8 +48,19 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      # GitHub's ubuntu runners already ship an Android SDK, but
+      # android-actions/setup-android@v3 fails on it (it re-downloads
+      # cmdline-tools 16.0 and its --licenses step exits 1 with
+      # "Failed to find package 'tools'"). Use the preinstalled SDK
+      # directly instead: install the API 35 platform + build-tools
+      # the project targets (compileSdk/targetSdk 35) and accept
+      # licenses with the runner's own sdkmanager.
+      - name: Set up Android SDK (preinstalled)
+        run: |
+          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses
+          "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
       - name: Install Capacitor dependencies
         working-directory: frostora-android
