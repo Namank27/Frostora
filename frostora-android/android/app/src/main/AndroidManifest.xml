@@ -8,6 +8,10 @@
         <!-- v1.0.1: the background-audio service posts its Now
              Playing notification through this (Android 13+). -->
         <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+        <!-- v1.0.2: native voice search (SpeechRecognizer) records
+             through the mic; requested at runtime when the mic is
+             tapped, only inside the APK. -->
+        <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"

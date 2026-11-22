@@ -9,6 +9,7 @@ import {
   setNativePlaying,
   setNativeVolume,
   startBackgroundAudio,
+  startNativeVoiceSearch,
   updateNativeMetadata,
   watchNativeVolume,
 } from "./nativeAudio";
@@ -1446,11 +1447,10 @@ function SpeedDial({
   // v1.0.1: the auto-spin fast path (paintAuto, below) writes
   // transform every frame but only touches the paint-expensive
   // properties (opacity / visibility / zIndex / shade / shadow)
-  // when a tile's coarse depth bucket changes — during the slow
-  // auto-spin drift (3.5°/s) a tile's depth barely moves, so most
-  // frames become transform-only, GPU-composited writes.
+  // when a tile's coarse depth bucket changes — during the
+  // auto-spin drift a tile's depth barely moves, so most frames
+  // become transform-only, GPU-composited writes.
   const tileBucketRef = useRef<number[]>([]);
-  const lastAutoPaintRef = useRef(0);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const onScreenRef = useRef(true);
   const occludedRef = useRef(occluded);
@@ -1596,16 +1596,23 @@ function SpeedDial({
           velRef.current *= Math.pow(0.94, dt / 16.7);
           paint();
         } else if (!reducedMotion.current) {
-          // Idle auto-spin (v1.0.1): the drift is only 3.5°/s, so
-          // painting at ~30fps is visually identical and halves
-          // the per-frame work — and paintAuto() makes those
-          // frames transform-only (see above). Drag / fling /
-          // spin-to still paint every frame via paint().
-          angleRef.current -= dt * 0.0035;
-          if (now - lastAutoPaintRef.current >= 32) {
-            lastAutoPaintRef.current = now;
-            paintAuto();
-          }
+          // Idle auto-spin: paint EVERY frame via paintAuto().
+          // v1.0.1 throttled auto-spin paints to ~31fps (32ms) to
+          // halve the work, but that is exactly why it still
+          // stuttered on Naman's 120Hz phone: a 31fps paint
+          // cadence can never line up with a 60/120Hz vsync, so
+          // frames presented unevenly. Speed alone could not fix
+          // that — at the same 32ms cadence a faster spin only
+          // makes each jump bigger. Verified by cadence analysis
+          // + a frame-timing bench of the exact paint math (the
+          // live-browser run could not be captured in this
+          // environment, so the phone test is the final check):
+          // paintAuto is transform-only per frame, so painting
+          // every frame is cheap, and the drift is now 10°/s —
+          // Naman's faster-speed suggestion — which at 120Hz is
+          // ~0.8px per frame: small, even steps, no judder.
+          angleRef.current -= dt * 0.01;
+          paintAuto();
         }
       }
       raf = requestAnimationFrame(tick);
@@ -3922,6 +3929,10 @@ export function App() {
   const [voiceState, setVoiceState] = useState<VoiceState | null>(null);
   const [voiceTranscript, setVoiceTranscript] = useState("");
   const voiceRecRef = useRef<{ stop: () => void } | null>(null);
+  // v1.0.2: cleanup for the native (APK) voice session — the
+  // stop function returned by startNativeVoiceSearch. Null on
+  // web, where the Web Speech recognizer above is used instead.
+  const voiceNativeStopRef = useRef<(() => void) | null>(null);
   const voiceHeardRef = useRef(false);
   // Playlist/collection page (reference layout): in-page track filter,
   // header pill menu, desktop detection + Now Playing side panel.
@@ -5805,84 +5816,143 @@ export function App() {
     setSearchQuery(name);
   }, []);
 
-  // Voice search (mic in the bottom nav): opens the liquid-glass
-  // voice sheet and starts a REAL Web Speech recognition session.
-  // "Listening…" only shows while that session is live. No support,
-  // an error, or silence all land on the sheet's honest unavailable
-  // state — the sheet then offers typing instead.
   const closeVoiceSearch = useCallback(() => {
     try { voiceRecRef.current?.stop(); } catch { /* already stopped */ }
     voiceRecRef.current = null;
+    // v1.0.2: stop the native session too (no-op on web / when
+    // no native session is running).
+    try { voiceNativeStopRef.current?.(); } catch { /* already stopped */ }
+    voiceNativeStopRef.current = null;
     setVoiceState(null);
   }, []);
 
+  // Voice search (mic in the bottom nav): opens the liquid-glass
+  // voice sheet and starts a REAL recognition session.
+  // "Listening…" only shows while that session is live. No support,
+  // an error, or silence all land on the sheet's honest unavailable
+  // state — the sheet then offers typing instead.
+  //
+  // v1.0.2: inside the APK the native engine goes FIRST. Android
+  // WebView does not expose the Web Speech API at all, so the mic
+  // used to land on "Voice search isn't available here" every
+  // time — the native SpeechRecognizer (RECORD_AUDIO, asked when
+  // the mic is tapped) is what actually hears the user. If the
+  // native call rejects (no recognizer on the device, mic denied)
+  // it falls through to Web Speech, which decides the unavailable
+  // state exactly as before. On the web build the native branch
+  // is never taken and Web Speech runs as it always did.
   const startVoiceSearch = useCallback(() => {
     setOpenCard(null);
     setTab("search");
     setVoiceTranscript("");
     voiceHeardRef.current = false;
-    const w = window as unknown as {
-      SpeechRecognition?: new () => {
-        lang: string;
-        interimResults: boolean;
-        start: () => void;
-        stop: () => void;
-        onresult: ((e: { results: { length: number; [i: number]: { isFinal: boolean; [j: number]: { transcript: string } } } }) => void) | null;
-        onerror: (() => void) | null;
-        onend: (() => void) | null;
-      };
-      webkitSpeechRecognition?: unknown;
+
+    // Shared "we heard a phrase" ending for both engines: show
+    // it, run the search, then close the sheet.
+    const onHeard = (text: string) => {
+      voiceHeardRef.current = true;
+      setVoiceState("heard");
+      setSearchInput(text);
+      setSearchQuery(text);
+      window.setTimeout(() => setVoiceState(null), 650);
     };
-    const SR = w.SpeechRecognition ?? (w.webkitSpeechRecognition as typeof w.SpeechRecognition);
-    if (!SR) {
-      setVoiceState("unavailable");
+
+    const startWebSpeech = () => {
+      const w = window as unknown as {
+        SpeechRecognition?: new () => {
+          lang: string;
+          interimResults: boolean;
+          start: () => void;
+          stop: () => void;
+          onresult: ((e: { results: { length: number; [i: number]: { isFinal: boolean; [j: number]: { transcript: string } } } }) => void) | null;
+          onerror: (() => void) | null;
+          onend: (() => void) | null;
+        };
+        webkitSpeechRecognition?: unknown;
+      };
+      const SR = w.SpeechRecognition ?? (w.webkitSpeechRecognition as typeof w.SpeechRecognition);
+      if (!SR) {
+        setVoiceState("unavailable");
+        return;
+      }
+      try {
+        const rec = new SR();
+        voiceRecRef.current = rec;
+        rec.lang = "en-IN";
+        rec.interimResults = true;
+        rec.onresult = (e) => {
+          let text = "";
+          let isFinal = false;
+          for (let i = 0; i < e.results.length; i++) {
+            const r = e.results[i];
+            if (!r) continue;
+            if (r.isFinal) isFinal = true;
+            text += r[0]?.transcript ?? "";
+          }
+          text = text.trim();
+          if (text) setVoiceTranscript(text);
+          if (isFinal && text) onHeard(text);
+        };
+        rec.onerror = () => {
+          if (!voiceHeardRef.current) setVoiceState("unavailable");
+        };
+        rec.onend = () => {
+          voiceRecRef.current = null;
+          if (!voiceHeardRef.current) {
+            setVoiceState((s) => (s === "listening" ? "unavailable" : s));
+          }
+        };
+        setVoiceState("listening");
+        rec.start();
+        // Safety: if nothing is heard within 8s, stop faking patience —
+        // onend flips the sheet to the honest unavailable state.
+        window.setTimeout(() => {
+          if (!voiceHeardRef.current) {
+            try { rec.stop(); } catch { /* already stopped */ }
+          }
+        }, 8000);
+      } catch {
+        setVoiceState("unavailable");
+      }
+    };
+
+    if (isNativeApp()) {
+      void startNativeVoiceSearch({
+        onPartial: (text) => {
+          if (text) setVoiceTranscript(text);
+        },
+        onResult: (matches) => {
+          const text = (matches[0] ?? "").trim();
+          try { voiceNativeStopRef.current?.(); } catch { /* already stopped */ }
+          voiceNativeStopRef.current = null;
+          if (text) onHeard(text);
+          else if (!voiceHeardRef.current) setVoiceState("unavailable");
+        },
+        onError: () => {
+          try { voiceNativeStopRef.current?.(); } catch { /* already stopped */ }
+          voiceNativeStopRef.current = null;
+          if (!voiceHeardRef.current) setVoiceState("unavailable");
+        },
+      }).then((stop) => {
+        voiceNativeStopRef.current = stop;
+        setVoiceState("listening");
+        // Safety: if nothing is heard within 8s, stop the session
+        // and say so honestly (same 8s as the Web Speech path).
+        window.setTimeout(() => {
+          if (!voiceHeardRef.current) {
+            try { voiceNativeStopRef.current?.(); } catch { /* already stopped */ }
+            voiceNativeStopRef.current = null;
+            setVoiceState((s) => (s === "listening" ? "unavailable" : s));
+          }
+        }, 8000);
+      }).catch(() => {
+        // No recognizer / mic denied: Web Speech gets its chance,
+        // and only it can land the sheet on "unavailable".
+        startWebSpeech();
+      });
       return;
     }
-    try {
-      const rec = new SR();
-      voiceRecRef.current = rec;
-      rec.lang = "en-IN";
-      rec.interimResults = true;
-      rec.onresult = (e) => {
-        let text = "";
-        let isFinal = false;
-        for (let i = 0; i < e.results.length; i++) {
-          const r = e.results[i];
-          if (!r) continue;
-          if (r.isFinal) isFinal = true;
-          text += r[0]?.transcript ?? "";
-        }
-        text = text.trim();
-        if (text) setVoiceTranscript(text);
-        if (isFinal && text) {
-          voiceHeardRef.current = true;
-          setVoiceState("heard");
-          setSearchInput(text);
-          setSearchQuery(text);
-          window.setTimeout(() => setVoiceState(null), 650);
-        }
-      };
-      rec.onerror = () => {
-        if (!voiceHeardRef.current) setVoiceState("unavailable");
-      };
-      rec.onend = () => {
-        voiceRecRef.current = null;
-        if (!voiceHeardRef.current) {
-          setVoiceState((s) => (s === "listening" ? "unavailable" : s));
-        }
-      };
-      setVoiceState("listening");
-      rec.start();
-      // Safety: if nothing is heard within 8s, stop faking patience —
-      // onend flips the sheet to the honest unavailable state.
-      window.setTimeout(() => {
-        if (!voiceHeardRef.current) {
-          try { rec.stop(); } catch { /* already stopped */ }
-        }
-      }, 8000);
-    } catch {
-      setVoiceState("unavailable");
-    }
+    startWebSpeech();
   }, []);
 
   // "Play next": the song plays immediately after the one playing

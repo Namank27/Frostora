@@ -28,6 +28,13 @@
  *     slider follows the buttons and the buttons follow the
  *     slider (App.tsx keeps slider == system volume ==
  *     player volume).
+ *   - Voice search (v1.0.2): `startVoiceSearch` drives the
+ *     platform SpeechRecognizer (en-IN, free-form, partial
+ *     results) and emits `speechPartial` (interim text),
+ *     `speechResult` (final matches) and `speechError`. The Web
+ *     Speech API does not exist in Android WebView, so without
+ *     this the mic in the APK could never hear anything — the
+ *     web build keeps using Web Speech (see App.tsx).
  *
  * Why a local plugin instead of a published one: the maintained
  * `@capawesome/capacitor-volume` (get/set volume + button events)
@@ -62,8 +69,13 @@ interface FrostoraAudioPlugin {
   setVolume(options: { volume: number }): Promise<void>;
   startVolumeWatch(): Promise<void>;
   stopVolumeWatch(): Promise<void>;
+  startVoiceSearch(): Promise<void>;
+  stopVoiceSearch(): Promise<void>;
   addListener(eventName: "volumeChange", listener: (e: { volume: number }) => void): Promise<PluginListenerHandle>;
   addListener(eventName: "playbackAction", listener: (e: { action: NativePlaybackAction }) => void): Promise<PluginListenerHandle>;
+  addListener(eventName: "speechPartial", listener: (e: { text: string }) => void): Promise<PluginListenerHandle>;
+  addListener(eventName: "speechResult", listener: (e: { matches: string[] }) => void): Promise<PluginListenerHandle>;
+  addListener(eventName: "speechError", listener: (e: { code: string; errorCode: number }) => void): Promise<PluginListenerHandle>;
 }
 
 const FrostoraAudio = registerPlugin<FrostoraAudioPlugin>("FrostoraAudio");
@@ -185,4 +197,55 @@ export async function onNativePlaybackAction(
   } catch {
     return () => {};
   }
+}
+
+/** Native voice search callbacks (v1.0.2). */
+export interface NativeVoiceCallbacks {
+  /** Interim transcript while the user is still speaking. */
+  onPartial: (text: string) => void;
+  /** Final matches once the recognizer finishes a phrase. */
+  onResult: (matches: string[]) => void;
+  /** Terminal failure (no match, timeout, network, denied…). */
+  onError: (code: string) => void;
+}
+
+/** Start a native voice search session (APK only).
+ * Resolves with a stop/cleanup function once the recognizer is
+ * actually listening. REJECTS when the device has no speech
+ * recognizer or the mic permission is denied — the caller falls
+ * back to Web Speech and only then shows the unavailable state.
+ * Throws on web: callers must guard with isNativeApp() first. */
+export async function startNativeVoiceSearch(
+  callbacks: NativeVoiceCallbacks,
+): Promise<() => void> {
+  if (!isNativeApp()) throw new Error("voice search is native-only");
+  const partialHandle = await FrostoraAudio.addListener("speechPartial", (e) => {
+    if (typeof e?.text === "string" && e.text.trim()) callbacks.onPartial(e.text.trim());
+  });
+  const resultHandle = await FrostoraAudio.addListener("speechResult", (e) => {
+    const matches = Array.isArray(e?.matches)
+      ? e.matches.filter((m): m is string => typeof m === "string" && m.trim().length > 0)
+      : [];
+    if (matches.length > 0) callbacks.onResult(matches);
+    else callbacks.onError("no-match");
+  });
+  const errorHandle = await FrostoraAudio.addListener("speechError", (e) => {
+    callbacks.onError(typeof e?.code === "string" ? e.code : "unknown");
+  });
+  let stopped = false;
+  const stop = () => {
+    if (stopped) return;
+    stopped = true;
+    void partialHandle.remove();
+    void resultHandle.remove();
+    void errorHandle.remove();
+    void FrostoraAudio.stopVoiceSearch().catch(() => {});
+  };
+  try {
+    await FrostoraAudio.startVoiceSearch();
+  } catch (err) {
+    stop();
+    throw err;
+  }
+  return stop;
 }

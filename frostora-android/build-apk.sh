@@ -124,6 +124,9 @@ for perm in [
     # v1.0.1: the background-audio service posts its Now Playing
     # notification through this (Android 13+).
     "android.permission.POST_NOTIFICATIONS",
+    # v1.0.2: native voice search (SpeechRecognizer) records
+    # through the mic; requested at runtime when the mic is tapped.
+    "android.permission.RECORD_AUDIO",
 ]:
     if perm not in s:
         s = s.replace("<application", f'    <uses-permission android:name="{perm}" />\n    <application', 1)
