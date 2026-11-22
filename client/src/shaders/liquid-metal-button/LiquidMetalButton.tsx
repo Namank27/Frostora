@@ -512,7 +512,7 @@ export function LiquidMetalButton({
               ? "Interactive liquid metal play button"
               : "Interactive liquid metal button"}
           srcDoc={source}
-          sandbox="allow-scripts"
+          sandbox="allow-scripts allow-same-origin"
           loading="eager"
           onLoad={() => {
             setReady(true);
@@ -526,7 +526,7 @@ export function LiquidMetalButton({
   );
 }
 
-const HEALTH_TIMEOUT_MS = 2500;
+const HEALTH_TIMEOUT_MS = 8000;
 
 /* Liquid-glass fallback for when the WebGL button cannot prove it
    rendered: same host size, same label, same tap action, in the app's
