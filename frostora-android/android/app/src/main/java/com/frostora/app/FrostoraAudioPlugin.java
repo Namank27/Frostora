@@ -145,7 +145,11 @@ public class FrostoraAudioPlugin extends Plugin implements MediaPlaybackService.
                 @Override
                 public void onReceive(Context context, Intent intent) {
                     if (intent == null) return;
-                    int stream = intent.getIntExtra(AudioManager.EXTRA_VOLUME_STREAM_TYPE, -1);
+                    // The VOLUME_CHANGED_ACTION extra key is a plain
+                    // string: AudioManager has no EXTRA_VOLUME_STREAM_TYPE
+                    // constant (it does not compile — Actions run #14),
+                    // so use the documented key literally.
+                    int stream = intent.getIntExtra("android.media.EXTRA_VOLUME_STREAM_TYPE", -1);
                     if (stream != AudioManager.STREAM_MUSIC) return;
                     emitVolume();
                 }
