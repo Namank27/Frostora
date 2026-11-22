@@ -814,6 +814,29 @@ input[type="range"].fader:focus-visible::-moz-range-thumb {
     0 14px 30px rgba(0, 0, 0, 0.28),
     0 4px 10px rgba(0, 0, 0, 0.18);
 }
+/* Travelling rim-light ring for the fallback play button (22 Nov):
+   pure CSS, no WebGL — so the play button still glows in Android
+   WebView, where the liquid-metal iframe falls back. A bright arc
+   on a conic gradient spins around the button, masked to a 3px ring. */
+@keyframes rim-spin {
+  to { transform: rotate(360deg); }
+}
+.play-rim-glow {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+  border-radius: 9999px;
+  pointer-events: none;
+  background: conic-gradient(from 0deg, transparent 0deg 250deg, rgba(255, 255, 255, 0.95) 295deg, rgba(255, 255, 255, 0.25) 320deg, transparent 350deg);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px));
+  animation: rim-spin 3s linear infinite;
+  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.65));
+}
+@media (prefers-reduced-motion: reduce) {
+  .play-rim-glow { animation: none; }
+}
 .np-seg-pill {
   background: rgba(255, 255, 255, 0.12);
   -webkit-backdrop-filter: blur(36px) saturate(180%);
