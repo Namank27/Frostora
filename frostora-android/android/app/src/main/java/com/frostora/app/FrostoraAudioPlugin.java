@@ -74,6 +74,13 @@ public class FrostoraAudioPlugin extends Plugin implements MediaPlaybackService.
     private AudioManager audioManager;
     private BroadcastReceiver volumeReceiver;
     private boolean volumeWatching = false;
+    // v1.0.3: last system level already emitted — setStreamVolume
+    // fires VOLUME_CHANGED_ACTION for every call, so a fast slider
+    // drag produces a storm of broadcasts, many for a level that
+    // was already reported. Emitting only on change keeps the
+    // bridge quiet; the web side separately suppresses the stale
+    // echoes that do get through while a drag is in flight.
+    private int lastEmittedVolumeLevel = -1;
     // v1.0.2: native speech recognition state. The recognizer is
     // created per session and destroyed when the session ends, so
     // a stale recognizer can never block the next tap on the mic.
@@ -218,6 +225,8 @@ public class FrostoraAudioPlugin extends Plugin implements MediaPlaybackService.
         if (audioManager == null) return;
         int max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
         int current = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
+        if (current == lastEmittedVolumeLevel) return;
+        lastEmittedVolumeLevel = current;
         double volume = max > 0 ? (double) current / (double) max : 0.0;
         JSObject data = new JSObject();
         data.put("volume", volume);

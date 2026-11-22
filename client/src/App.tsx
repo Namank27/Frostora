@@ -4551,6 +4551,19 @@ export function App() {
   // user's own drag, so read-backs are ignored for a moment after
   // applyVolume runs.
   const lastVolumeChangeRef = useRef(0);
+  // v1.0.3: same idea for the native echo. Every setNativeVolume
+  // fires Android's VOLUME_CHANGED_ACTION, so the plugin echoes
+  // the new system volume back — and the phone's media volume only
+  // has ~16 steps, so the echo is quantised AND arrives late. On
+  // a slow slide the echo matches and the >3 guard drops it; on a
+  // fast slide the echoes carry stale intermediate values, each
+  // more than 1pt away from the finger, so they yanked the slider
+  // backwards mid-drag and the two fought each other — the
+  // aggressive back-and-forth Naman reported. While a slider drag
+  // is in flight, native echoes are ignored outright (until 300ms
+  // after the last slider move); hardware-key presses still land,
+  // because no slider move refreshes the window then.
+  const suppressNativeEchoUntilRef = useRef(0);
 
   const stateRef = useRef({ queue, qIndex, repeat, shuffle, playing });
   stateRef.current = { queue, qIndex, repeat, shuffle, playing };
@@ -5141,9 +5154,20 @@ export function App() {
     // v1.0.1 (APK only): the in-app slider also moves the phone's
     // media volume, so slider == system volume == player volume.
     // No-op on the web build. The native volumeChange listener
-    // below echoes back the same value, which the >1 guard there
+    // below echoes back the same value, which the >3 guard there
     // drops, so a slider drag can never loop.
     void setNativeVolume(v / 100);
+  };
+
+  // v1.0.3: the only entry point for slider drags (mini-player
+  // fader, PlayfulVolume, Now Playing). Marks the drag so the
+  // native echo is suppressed while the finger is moving — see
+  // suppressNativeEchoUntilRef above. Every other applyVolume
+  // caller (hardware-key echoes, mount sync, poll) goes through
+  // applyVolume directly and does NOT suppress.
+  const applySliderVolume = (v: number) => {
+    suppressNativeEchoUntilRef.current = Date.now() + 300;
+    applyVolume(v);
   };
 
   // Reload the player with a different video for the SAME song
@@ -5579,8 +5603,9 @@ export function App() {
          volume into the slider once; then listen for hardware
          volume-key changes and move the slider (and the player,
          via applyVolume) to match. The slider's own drags push
-         the other way via applyVolume → setNativeVolume. The >1
-         guard drops the echo of our own sets, so the two can
+         the other way via applySliderVolume → applyVolume →
+         setNativeVolume. The drag-suppression window plus the >3
+         guard drop the echo of our own sets, so the two can
          never chase each other.
      (b) Lock-screen transport: the notification's play / pause /
          next / previous buttons arrive as playbackAction events
@@ -5598,8 +5623,15 @@ export function App() {
       if (Math.abs(pct - volumeRef.current) > 1) applyVolume(pct);
     });
     void watchNativeVolume((v) => {
+      // v1.0.3: ignore echoes while a slider drag is in flight —
+      // they carry stale, quantised values and yank the slider
+      // back mid-drag. Guard raised 1 → 3: one system step is
+      // ~6.7pts, so a real hardware-key press (≥ ~7pts) still
+      // passes, while the ≤ ~3.3pt rounding of our own echo does
+      // not.
+      if (Date.now() < suppressNativeEchoUntilRef.current) return;
       const pct = Math.round(v * 100);
-      if (Math.abs(pct - volumeRef.current) > 1) applyVolume(pct);
+      if (Math.abs(pct - volumeRef.current) > 3) applyVolume(pct);
     }).then((stop) => {
       if (cancelled) stop();
       else stopVolume = stop;
@@ -8144,7 +8176,7 @@ export function App() {
               min={0}
               max={100}
               value={volume}
-              onChange={(e) => applyVolume(Number(e.target.value))}
+              onChange={(e) => applySliderVolume(Number(e.target.value))}
               aria-label="Volume"
               className="fader hidden w-16 flex-none md:block"
               style={{ "--fill": `${volume}%` } as CSSProperties}
@@ -8354,7 +8386,7 @@ export function App() {
                   <span className="mt-[42px] flex-none">
                     <Icon d={P.speakerLow} size={19} />
                   </span>
-                  <PlayfulVolume value={volume} onChange={applyVolume} avatarSrc={smallThumb(current.thumbnail)} />
+                  <PlayfulVolume value={volume} onChange={applySliderVolume} avatarSrc={smallThumb(current.thumbnail)} />
                   <span className="mt-[41px] flex-none">
                     <Icon d={P.volume} size={20} />
                   </span>
@@ -8554,7 +8586,7 @@ export function App() {
           onNext={() => step(1)}
           onPrev={() => step(-1)}
           volume={volume}
-          onVolumeChange={applyVolume}
+          onVolumeChange={applySliderVolume}
           shuffle={shuffle}
           repeat={repeat}
           onToggleShuffle={toggleShuffle}
