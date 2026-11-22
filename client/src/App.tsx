@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, type ApiResponse } from "./api";
+import { api, getProfileName, setProfileName, type ApiResponse } from "./api";
 import { FIELDS } from "./fields";
 import LiquidGlassHeroDemo from "./components/liquid-glass-hero-demo";
 import TextGenerateEffectDemo from "./components/text-generate-effect-demo";
@@ -3389,7 +3389,11 @@ function ProfileSection({
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
-  const name = profile?.displayName ?? "Naman";
+  /* Display name lives only on this device (localStorage, default
+     "user") — it is never read from the server profile, so no other
+     person's name can ever appear here. */
+  const [localName, setLocalName] = useState<string>(() => getProfileName());
+  const name = localName;
   const ranges: [ProfileRange, string][] = [
     ["today", "Today"],
     ["week", "This week"],
@@ -3411,7 +3415,6 @@ function ProfileSection({
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
           <h1 className="font-display text-[34px] leading-tight">{profileLoading ? "…" : name}</h1>
-          <p className="mt-0.5 text-[13px] text-[var(--dim)]">@ {name.toLowerCase().replace(/\s+/g, "-")}</p>
           <div className="mt-4 flex gap-6">
             <div>
               <p className="text-[19px] font-semibold text-[var(--text)] tabular-nums">
@@ -3444,7 +3447,7 @@ function ProfileSection({
               <img src={profile.avatarUrl} alt="Your profile photo" className="h-full w-full object-cover" />
             ) : (
               <span className="metal flex h-full w-full items-center justify-center text-[34px] font-semibold text-[var(--accent)]">
-                {name.charAt(0).toUpperCase() || "N"}
+                {name.charAt(0).toUpperCase() || "U"}
               </span>
             )}
           </button>
@@ -3491,6 +3494,10 @@ function ProfileSection({
             }
             setSaving(true);
             setSaveError(null);
+            /* Name is saved only on this device; the server call
+               below saves just the bio. */
+            setProfileName(nameInput.trim());
+            setLocalName(nameInput.trim());
             onSaveProfile(nameInput.trim(), bioInput.trim())
               .then(() => setEditing(false))
               .catch(() => setSaveError("That didn't save. Try again."))

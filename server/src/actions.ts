@@ -3664,7 +3664,7 @@ export const Actions = {
 
   getProfile: {
     description:
-      "Returns the user's My Profile: display name, bio, and avatar URL (null until they set one). The row is created with the default name 'Naman' on first read.",
+      "Returns the user's My Profile: display name, bio, and avatar URL (null until they set one). The row is created with the default name 'user' on first read.",
     request: z.object({}),
     response: z.object({
       displayName: z.string(),
@@ -3676,12 +3676,12 @@ export const Actions = {
       const rows = await db.select().from(schema.profile).where(eq(schema.profile.deviceId, ctx.deviceId));
       let row = rows[0];
       if (!row) {
-        await db.insert(schema.profile).values({ deviceId: ctx.deviceId, displayName: "Naman", bio: "" });
+        await db.insert(schema.profile).values({ deviceId: ctx.deviceId, displayName: "user", bio: "" });
         const again = await db.select().from(schema.profile).where(eq(schema.profile.deviceId, ctx.deviceId));
         row = again[0];
       }
       return {
-        displayName: row?.displayName ?? "Naman",
+        displayName: row?.displayName ?? "user",
         bio: row?.bio ?? "",
         avatarUrl: row?.avatarBlobKey ? await ctx.blobs.getUrl(row.avatarBlobKey) : null,
       };
@@ -3689,7 +3689,7 @@ export const Actions = {
   },
 
   updateProfile: {
-    description: "Saves the user's editable profile display name and bio.",
+    description: "Saves the user's editable profile bio. The display name is NOT stored here — it lives only on the user's own device (localStorage, default 'user'); displayName is still accepted for compatibility but is ignored.",
     request: z.object({
       displayName: z.string().trim().min(1).max(40),
       bio: z.string().trim().max(160),
@@ -3699,11 +3699,11 @@ export const Actions = {
       const db = ctx.db;
       const rows = await db.select().from(schema.profile).where(eq(schema.profile.deviceId, ctx.deviceId));
       if (rows.length === 0) {
-        await db.insert(schema.profile).values({ deviceId: ctx.deviceId, displayName: args.displayName, bio: args.bio });
+        await db.insert(schema.profile).values({ deviceId: ctx.deviceId, displayName: "user", bio: args.bio });
       } else {
         await db
           .update(schema.profile)
-          .set({ displayName: args.displayName, bio: args.bio, updatedAt: new Date() })
+          .set({ bio: args.bio, updatedAt: new Date() })
           .where(eq(schema.profile.deviceId, ctx.deviceId));
       }
       ctx.invalidateQueries();
@@ -3729,7 +3729,7 @@ export const Actions = {
       const db = ctx.db;
       const rows = await db.select().from(schema.profile).where(eq(schema.profile.deviceId, ctx.deviceId));
       if (rows.length === 0) {
-        await db.insert(schema.profile).values({ deviceId: ctx.deviceId, displayName: "Naman", bio: "", avatarBlobKey: key });
+        await db.insert(schema.profile).values({ deviceId: ctx.deviceId, displayName: "user", bio: "", avatarBlobKey: key });
       } else {
         await db
           .update(schema.profile)
@@ -3793,7 +3793,7 @@ export const Actions = {
       if (rows.length === 0) {
         await db
           .insert(schema.profile)
-          .values({ deviceId: ctx.deviceId, displayName: "Naman", bio: "", wallpaperUrl: args.url, wallpaperBlobKey: null });
+          .values({ deviceId: ctx.deviceId, displayName: "user", bio: "", wallpaperUrl: args.url, wallpaperBlobKey: null });
       } else {
         await db
           .update(schema.profile)
@@ -3825,7 +3825,7 @@ export const Actions = {
       if (rows.length === 0) {
         await db
           .insert(schema.profile)
-          .values({ deviceId: ctx.deviceId, displayName: "Naman", bio: "", wallpaperUrl: null, wallpaperBlobKey: key });
+          .values({ deviceId: ctx.deviceId, displayName: "user", bio: "", wallpaperUrl: null, wallpaperBlobKey: key });
       } else {
         await db
           .update(schema.profile)

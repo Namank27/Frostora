@@ -33,6 +33,32 @@
 import type { Actions } from "./actions";
 
 const DEVICE_ID_KEY = "frostora-device-id";
+/* Profile display name — 22 Nov: this lives ONLY on this device, in
+   localStorage under `frostora-profile-name`. It is never sent to the
+   server and never shared across devices, so a fresh install always
+   shows the default "user" and the user can rename themselves.
+   (The server profile row used to be created with displayName
+   "Naman", which is why every phone showed Naman's name.) */
+const PROFILE_NAME_KEY = "frostora-profile-name";
+export const DEFAULT_PROFILE_NAME = "user";
+
+export function getProfileName(): string {
+  try {
+    const stored = localStorage.getItem(PROFILE_NAME_KEY)?.trim();
+    if (stored) return stored;
+  } catch {
+    // localStorage unavailable — fall through to the default.
+  }
+  return DEFAULT_PROFILE_NAME;
+}
+
+export function setProfileName(name: string): void {
+  try {
+    localStorage.setItem(PROFILE_NAME_KEY, name.trim());
+  } catch {
+    // localStorage unavailable — the name just won't persist.
+  }
+}
 
 function getDeviceId(): string {
   const fallbackId = () =>
