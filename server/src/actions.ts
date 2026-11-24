@@ -992,14 +992,18 @@ async function resolveTrackSegments(
   segments: SkipSegment[];
   skipSource: "segments" | "duration" | "none";
 }> {
+  // The video duration is BEST-EFFORT, not a gate: the InnerTube
+  // player endpoint that reports it does not answer from the live
+  // server (verified 24 Nov — getTrackSegments returned an empty
+  // window twice while getOfficialVideo, which never calls that
+  // endpoint when search already gave a duration, worked fine).
+  // Segments alone still pin the intro down, and an unknown end
+  // is reported as 0, which the client reads as "to the end".
   const videoDur = await fetchVideoDurationSec(videoId);
-  if (videoDur <= 0) {
-    return { videoDurationSec: 0, musicStartSec: 0, musicEndSec: 0, segments: [], skipSource: "none" };
-  }
   const segments = await fetchSkipSegments(videoId);
   const audioDur = durationSec && durationSec > 0 ? durationSec : 0;
   let musicStart = 0;
-  let musicEnd = videoDur;
+  let musicEnd = videoDur > 0 ? videoDur : 0;
   let source: "segments" | "duration" | "none" = "none";
   let cur = 0;
   for (const s of segments) {
@@ -1009,15 +1013,17 @@ async function resolveTrackSegments(
     musicStart = cur;
     source = "segments";
   }
-  let tail = videoDur;
-  for (const s of [...segments].reverse()) {
-    if (s.end >= tail - 1.5 && s.start < tail) tail = s.start;
+  if (videoDur > 0) {
+    let tail = videoDur;
+    for (const s of [...segments].reverse()) {
+      if (s.end >= tail - 1.5 && s.start < tail) tail = s.start;
+    }
+    if (tail < videoDur) {
+      musicEnd = tail;
+      source = "segments";
+    }
   }
-  if (tail < videoDur) {
-    musicEnd = tail;
-    source = "segments";
-  }
-  if (audioDur > 0) {
+  if (audioDur > 0 && videoDur > 0) {
     if (musicStart === 0 && musicEnd < videoDur) {
       const implied = musicEnd - audioDur;
       if (implied >= 4) {
@@ -1038,7 +1044,13 @@ async function resolveTrackSegments(
       }
     }
   }
-  if (musicEnd - musicStart < 30) {
+  // Sanity: if what remains is not a plausible song window, the
+  // data disagrees with itself — play the upload untouched rather
+  // than risk cutting music. With the end unknown, the audio
+  // duration stands in for it; with neither known, the
+  // crowd-verified segment walk stands on its own.
+  const effEnd = musicEnd > 0 ? musicEnd : audioDur > 0 ? audioDur : 0;
+  if (effEnd > 0 && effEnd - musicStart < 30) {
     musicStart = 0;
     musicEnd = videoDur;
     source = "none";
