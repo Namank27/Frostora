@@ -970,6 +970,82 @@ async function resolveOfficialVideo(
   return { ...base, musicStartSec: musicStart, musicEndSec: musicEnd, segments, skipSource: source };
 }
 
+/* Non-music segments for a track's OWN upload (Song mode + DJ
+   mix): the same SponsorBlock lookup the MV path uses, but for the
+   audio upload the player actually holds. Returns the music window
+   inside the upload (musicStartSec / musicEndSec) and the raw
+   segments, so Song mode can skip spoken intros, skits and credit
+   outros the same way Video mode already does for the official
+   video. A video with no submissions returns 404 from
+   SponsorBlock → "no segments known" → the duration comparison
+   below, then the bare window — playback is never cut on missing
+   data. The derivation mirrors resolveOfficialVideo exactly (same
+   walk, same duration fallback, same sanity check), only the
+   video under inspection differs. */
+async function resolveTrackSegments(
+  videoId: string,
+  durationSec: number | null,
+): Promise<{
+  videoDurationSec: number;
+  musicStartSec: number;
+  musicEndSec: number;
+  segments: SkipSegment[];
+  skipSource: "segments" | "duration" | "none";
+}> {
+  const videoDur = await fetchVideoDurationSec(videoId);
+  if (videoDur <= 0) {
+    return { videoDurationSec: 0, musicStartSec: 0, musicEndSec: 0, segments: [], skipSource: "none" };
+  }
+  const segments = await fetchSkipSegments(videoId);
+  const audioDur = durationSec && durationSec > 0 ? durationSec : 0;
+  let musicStart = 0;
+  let musicEnd = videoDur;
+  let source: "segments" | "duration" | "none" = "none";
+  let cur = 0;
+  for (const s of segments) {
+    if (s.start <= cur + 1.5 && s.end > cur) cur = s.end;
+  }
+  if (cur > 0) {
+    musicStart = cur;
+    source = "segments";
+  }
+  let tail = videoDur;
+  for (const s of [...segments].reverse()) {
+    if (s.end >= tail - 1.5 && s.start < tail) tail = s.start;
+  }
+  if (tail < videoDur) {
+    musicEnd = tail;
+    source = "segments";
+  }
+  if (audioDur > 0) {
+    if (musicStart === 0 && musicEnd < videoDur) {
+      const implied = musicEnd - audioDur;
+      if (implied >= 4) {
+        musicStart = Math.max(0, implied - 1);
+        source = "segments";
+      }
+    } else if (musicEnd === videoDur && musicStart > 0) {
+      const impliedEnd = musicStart + audioDur;
+      if (videoDur - impliedEnd >= 4) {
+        musicEnd = Math.min(videoDur, impliedEnd + 1);
+        source = "segments";
+      }
+    } else if (musicStart === 0 && musicEnd === videoDur) {
+      const excess = videoDur - audioDur;
+      if (excess >= 8 && excess <= 120) {
+        musicStart = Math.max(0, excess - 1);
+        source = "duration";
+      }
+    }
+  }
+  if (musicEnd - musicStart < 30) {
+    musicStart = 0;
+    musicEnd = videoDur;
+    source = "none";
+  }
+  return { videoDurationSec: videoDur, musicStartSec: musicStart, musicEndSec: musicEnd, segments, skipSource: source };
+}
+
 /* ---------------- Lyrics (LRCLib) ----------------
    Echo-style model again: lyrics are fetched live, never stored or
    invented. LRCLib returns LRC `syncedLyrics` ([mm:ss.xx] lines) and
@@ -1735,6 +1811,20 @@ const officialVideoResponse = z.object({
   skipSource: z.enum(["segments", "duration", "none"]),
 });
 
+const trackSegmentsResponse = z.object({
+  videoId: z.string(),
+  error: z.string().nullable(),
+  // Non-music skipping for Song mode: the upload's real duration,
+  // the music window inside it, the known non-music segments
+  // (SponsorBlock music_offtopic / intro / outro), and where the
+  // window came from. Defaults describe "play the upload as-is".
+  videoDurationSec: z.number(),
+  musicStartSec: z.number(),
+  musicEndSec: z.number(),
+  segments: z.array(z.object({ start: z.number(), end: z.number(), category: z.string() })),
+  skipSource: z.enum(["segments", "duration", "none"]),
+});
+
 const lyricsResponse = z.object({
   kind: z.enum(["karaoke", "synced", "plain", "none"]),
   lines: z.array(
@@ -2437,6 +2527,44 @@ export const Actions = {
     },
   },
 
+  getTrackSegments: {
+    description:
+      "Non-music segments (SponsorBlock music_offtopic / intro / outro) for a track's OWN YouTube upload — the audio the player holds in Song mode — plus the music window inside it. Lets Song mode skip spoken intros, skits and credit outros the same way Video mode already does for the official video, and lets the DJ mix start the incoming song at its music instead of its intro. Returns the bare window (musicStartSec 0, no segments) when nothing is known, so playback is never cut on missing data.",
+    request: z.object({
+      videoId: z.string().trim().min(1).max(50),
+      durationSec: z.number().int().min(0).max(3600).optional(),
+    }),
+    response: trackSegmentsResponse,
+    async handler(args: any, _ctx: ActionContext): Promise<z.infer<typeof trackSegmentsResponse>> {
+      try {
+        const r = await cached(
+          `tracksegments:${args.videoId.trim()}`,
+          LYRICS_TTL_MS,
+          () => resolveTrackSegments(args.videoId.trim(), args.durationSec ?? null),
+        );
+        return {
+          videoId: args.videoId.trim(),
+          error: null,
+          videoDurationSec: r.videoDurationSec,
+          musicStartSec: r.musicStartSec,
+          musicEndSec: r.musicEndSec,
+          segments: r.segments,
+          skipSource: r.skipSource,
+        };
+      } catch (e) {
+        return {
+          videoId: args.videoId.trim(),
+          error: e instanceof Error ? e.message : "The segment lookup failed. Try again.",
+          videoDurationSec: 0,
+          musicStartSec: 0,
+          musicEndSec: 0,
+          segments: [],
+          skipSource: "none",
+        };
+      }
+    },
+  },
+
   toggleLike: {
     description:
       "Likes a track if it is not liked yet, or removes the like if it already is. Returns the new liked state.",
@@ -2757,6 +2885,71 @@ export const Actions = {
         });
       }
       return { playlists: out };
+    },
+  },
+
+  addTrackToPlaylist: {
+    description:
+      "Adds one track to one of the user's own playlists (created or imported), appended at the end. Returns added:false when the song is already in that playlist (no duplicate). The playlist must belong to this device.",
+    request: z.object({
+      playlistId: z.string().trim().min(1).max(128),
+      track: trackInputSchema,
+    }),
+    response: z.object({
+      ok: z.boolean(),
+      added: z.boolean(),
+      error: z.string().nullable(),
+    }),
+    async handler(
+      args: any,
+      ctx: ActionContext,
+    ): Promise<{ ok: boolean; added: boolean; error: string | null }> {
+      const db = ctx.db;
+      const playlistId = args.playlistId.replace(/^user:/, "");
+      const t = args.track;
+      const playlist = await db
+        .select({ id: schema.userPlaylists.id })
+        .from(schema.userPlaylists)
+        .where(and(eq(schema.userPlaylists.deviceId, ctx.deviceId), eq(schema.userPlaylists.id, playlistId)));
+      if (playlist.length === 0) {
+        return { ok: false, added: false, error: "That playlist could not be found." };
+      }
+      const existing = await db
+        .select({ videoId: schema.userPlaylistTracks.videoId })
+        .from(schema.userPlaylistTracks)
+        .where(
+          and(
+            eq(schema.userPlaylistTracks.deviceId, ctx.deviceId),
+            eq(schema.userPlaylistTracks.playlistId, playlistId),
+            eq(schema.userPlaylistTracks.videoId, t.videoId),
+          ),
+        );
+      if (existing.length > 0) {
+        return { ok: true, added: false, error: null };
+      }
+      const siblings = await db
+        .select({ position: schema.userPlaylistTracks.position })
+        .from(schema.userPlaylistTracks)
+        .where(
+          and(
+            eq(schema.userPlaylistTracks.deviceId, ctx.deviceId),
+            eq(schema.userPlaylistTracks.playlistId, playlistId),
+          ),
+        );
+      const nextPosition = siblings.reduce((m, s) => Math.max(m, s.position), -1) + 1;
+      await db.insert(schema.userPlaylistTracks).values({
+        deviceId: ctx.deviceId,
+        playlistId,
+        position: nextPosition,
+        videoId: t.videoId,
+        title: t.title,
+        artist: t.artist,
+        album: t.album,
+        duration: t.duration,
+        thumbnail: t.thumbnail,
+      });
+      ctx.invalidateQueries();
+      return { ok: true, added: true, error: null };
     },
   },
 

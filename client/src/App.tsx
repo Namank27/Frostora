@@ -1145,6 +1145,7 @@ const TrackRow = memo(function TrackRow({
   onToggleLikeTrack,
   onPlayNextTrack,
   onAddToQueueTrack,
+  onAddToPlaylistTrack,
 }: {
   track: Track;
   list: Track[];
@@ -1160,6 +1161,7 @@ const TrackRow = memo(function TrackRow({
   onToggleLikeTrack: (track: Track) => void;
   onPlayNextTrack?: (track: Track) => void;
   onAddToQueueTrack?: (track: Track) => void;
+  onAddToPlaylistTrack?: (track: Track) => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   return (
@@ -1244,6 +1246,18 @@ const TrackRow = memo(function TrackRow({
             Add to queue
           </button>
         )}
+        {onAddToPlaylistTrack && (
+          <button
+            type="button"
+            onClick={() => {
+              setMenuOpen(false);
+              onAddToPlaylistTrack(track);
+            }}
+            className="glass-soft rounded-full px-3.5 py-1.5 text-[12px] text-[var(--text)]"
+          >
+            Add to playlist
+          </button>
+        )}
         <button
           type="button"
           onClick={() => {
@@ -1285,6 +1299,7 @@ const PopularRow = memo(function PopularRow({
   onToggleLikeTrack,
   onPlayNextTrack,
   onAddToQueueTrack,
+  onAddToPlaylistTrack,
 }: {
   song: PopularSong;
   rank: number;
@@ -1296,6 +1311,7 @@ const PopularRow = memo(function PopularRow({
   onToggleLikeTrack: (track: Track) => void;
   onPlayNextTrack?: (track: Track) => void;
   onAddToQueueTrack?: (track: Track) => void;
+  onAddToPlaylistTrack?: (track: Track) => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   return (
@@ -1373,6 +1389,18 @@ const PopularRow = memo(function PopularRow({
               className="glass-soft rounded-full px-3.5 py-1.5 text-[12px] text-[var(--text)]"
             >
               Add to queue
+            </button>
+          )}
+          {onAddToPlaylistTrack && (
+            <button
+              type="button"
+              onClick={() => {
+                setMenuOpen(false);
+                onAddToPlaylistTrack(song);
+              }}
+              className="glass-soft rounded-full px-3.5 py-1.5 text-[12px] text-[var(--text)]"
+            >
+              Add to playlist
             </button>
           )}
         </div>
@@ -3263,6 +3291,223 @@ function AddPlaylistSheet({
   );
 }
 
+/* ---------------- Add to playlist sheet ----------------
+   Opened from any track row's ⋯ menu → Add to playlist. Lists the
+   user's own playlists; tapping one appends the song at the end
+   (the server dedupes — tapping a playlist that already has it
+   just says so instead of adding a second copy). "New playlist"
+   creates a blank playlist with this song already in it. The sheet
+   confirms briefly, then closes itself. */
+
+function AddToPlaylistSheet({
+  track,
+  playlists,
+  onClose,
+}: {
+  track: Track;
+  playlists: Array<{ id: string; title: string; subtitle: string; thumbnail: string; trackCount: number }>;
+  onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [doneName, setDoneName] = useState<string | null>(null);
+  const [alreadyThere, setAlreadyThere] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [showNew, setShowNew] = useState(false);
+  const [newName, setNewName] = useState("");
+
+  // The confirmation shows briefly, then the sheet closes itself.
+  useEffect(() => {
+    if (!doneName) return;
+    const t = setTimeout(onClose, 900);
+    return () => clearTimeout(t);
+  }, [doneName, onClose]);
+
+  const doAdd = async (playlistId: string, playlistTitle: string): Promise<boolean> => {
+    try {
+      const res = await api.addTrackToPlaylist({ playlistId, track });
+      if (!res.ok) {
+        setError(res.error ?? "Couldn't add that song. Try again.");
+        return false;
+      }
+      setAlreadyThere(!res.added);
+      setDoneName(playlistTitle);
+      void queryClient.invalidateQueries({ queryKey: ["userPlaylists"] });
+      void queryClient.invalidateQueries({ queryKey: ["collection"] });
+      return true;
+    } catch {
+      setError("Couldn't add that song. Try again.");
+      return false;
+    }
+  };
+
+  const addTo = async (playlistId: string, playlistTitle: string) => {
+    if (busyId) return;
+    setBusyId(playlistId);
+    setError(null);
+    try {
+      await doAdd(playlistId, playlistTitle);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const createWithTrack = async () => {
+    const name = newName.trim();
+    if (!name || busyId) return;
+    setBusyId("__new__");
+    setError(null);
+    try {
+      const res = await api.createPlaylist({ name });
+      if (!res.ok || !res.playlist) {
+        setError(res.error ?? "That playlist could not be created. Try again.");
+        return;
+      }
+      await doAdd(res.playlist.id, res.playlist.title);
+    } catch {
+      setError("That playlist could not be created. Try again.");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[90] flex items-end justify-center bg-black/60 sm:items-center sm:p-4"
+      role="presentation"
+      onClick={() => {
+        if (!busyId) onClose();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="add-to-playlist-title"
+        className="vision-panel sheet-in w-full max-w-md rounded-t-[28px] p-5 sm:rounded-[28px]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <h2 id="add-to-playlist-title" className="font-display text-[24px] leading-tight text-white">
+            Add to playlist
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={!!busyId}
+            aria-label="Close Add to playlist"
+            className="glass-soft flex h-9 w-9 flex-none items-center justify-center rounded-full text-white/80 transition-transform duration-150 active:scale-[0.94] disabled:opacity-50"
+          >
+            <Icon d={P.x} size={15} />
+          </button>
+        </div>
+
+        <div className="mt-3 flex items-center gap-3 rounded-2xl bg-white/[0.05] px-3 py-2.5">
+          <span className="relative block h-11 w-11 flex-none overflow-hidden rounded-xl">
+            <img src={smallThumb(track.thumbnail)} alt="" className="h-full w-full object-cover" loading="lazy" decoding="async" />
+          </span>
+          <span className="min-w-0">
+            <span className="block truncate text-[14px] font-semibold text-white">{track.title}</span>
+            <span className="block truncate text-[12.5px] text-[var(--dim)]">{track.artist}</span>
+          </span>
+        </div>
+
+        {doneName ? (
+          <p className="mt-5 mb-1 text-center text-[14px] text-white">
+            {alreadyThere ? `Already in ${doneName}` : `Added to ${doneName}`}
+          </p>
+        ) : (
+          <>
+            <div className="mt-4 max-h-[46vh] overflow-y-auto pr-0.5">
+              {playlists.length === 0 && !showNew && (
+                <p className="py-2 text-[13.5px] text-[var(--dim)]">
+                  You don&apos;t have any playlists yet — make your first one below.
+                </p>
+              )}
+              {playlists.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  disabled={!!busyId}
+                  onClick={() => void addTo(p.id, p.title)}
+                  aria-label={`Add to ${p.title}`}
+                  className="flex w-full items-center gap-3 rounded-2xl px-2 py-2 text-left transition-colors duration-150 hover:bg-white/[0.06] disabled:opacity-50"
+                >
+                  {p.thumbnail ? (
+                    <img src={smallThumb(p.thumbnail)} alt="" className="h-11 w-11 flex-none rounded-xl object-cover" loading="lazy" decoding="async" />
+                  ) : (
+                    <span className="flex h-11 w-11 flex-none items-center justify-center rounded-xl bg-white/10 text-[16px] font-semibold text-white/80">
+                      {p.title.charAt(0).toUpperCase()}
+                    </span>
+                  )}
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[14.5px] text-white">{p.title}</span>
+                    <span className="block truncate text-[12.5px] text-[var(--dim)]">
+                      {p.trackCount} {p.trackCount === 1 ? "song" : "songs"}
+                    </span>
+                  </span>
+                  {busyId === p.id && <span className="text-[12.5px] text-[var(--dim)]">Adding…</span>}
+                </button>
+              ))}
+            </div>
+
+            {showNew ? (
+              <div className="mt-3">
+                <label className="text-[12.5px] tracking-[0.08em] text-[var(--dim)] uppercase" htmlFor="add-to-playlist-new-name">
+                  New playlist name
+                </label>
+                <input
+                  id="add-to-playlist-new-name"
+                  type="text"
+                  value={newName}
+                  autoFocus
+                  onChange={(e) => setNewName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") void createWithTrack();
+                  }}
+                  placeholder="My new playlist"
+                  maxLength={120}
+                  className="mt-1.5 w-full rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-2.5 text-[14px] text-white placeholder:text-white/35 focus:border-white/25 focus:outline-none"
+                />
+                <div className="mt-3 flex gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => void createWithTrack()}
+                    disabled={!newName.trim() || !!busyId}
+                    className="flex-1 rounded-full bg-white px-5 py-2.5 text-[13px] font-semibold tracking-[0.08em] text-[#141416] uppercase transition-transform duration-150 active:scale-[0.97] disabled:opacity-50"
+                  >
+                    {busyId === "__new__" ? "Creating…" : "Create & add"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowNew(false)}
+                    disabled={!!busyId}
+                    className="glass-soft rounded-full px-5 py-2.5 text-[13px] text-[var(--text)] disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowNew(true)}
+                disabled={!!busyId}
+                className="mt-3 flex w-full items-center gap-3 rounded-2xl px-2 py-2 text-left transition-colors duration-150 hover:bg-white/[0.06] disabled:opacity-50"
+              >
+                <span className="glass-soft flex h-11 w-11 flex-none items-center justify-center rounded-xl text-white">
+                  <Icon d={P.plus} size={15} />
+                </span>
+                <span className="text-[14.5px] text-white">New playlist</span>
+              </button>
+            )}
+            {error && <p className="mt-3 text-center text-[13px] text-red-300">{error}</p>}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ---------------- Wallpaper settings ----------------
    The wallpaper behind the frosted panels is the user's choice:
    paste an image link, or upload an image from their own phone /
@@ -3956,6 +4201,9 @@ export function App() {
   const [removePlaylistError, setRemovePlaylistError] = useState<string | null>(null);
   // Add Playlist sheet (create blank / import from a link).
   const [showAddPlaylist, setShowAddPlaylist] = useState(false);
+  // Add-to-playlist sheet: the song the picker is open for (null =
+  // closed). Set from any track row's ⋯ menu → Add to playlist.
+  const [addToPlaylistTrack, setAddToPlaylistTrack] = useState<Track | null>(null);
   // The user's own playlists (created + imported), shown ahead of
   // the live feed cards in All Playlists and the Library sidebar.
   const userPlaylistsQuery = useQuery({
@@ -4222,6 +4470,17 @@ export function App() {
   // `trackId`, and the offset of the song's 0:00 inside it (the
   // MV's music-window start; 0 for the song upload).
   const standbyLoadedRef = useRef<{ trackId: string; videoId: string; start: number } | null>(null);
+  // DJ mix (replaces the plain crossfade): when a song is about
+  // to end, the next song is preloaded into the warm standby and
+  // the two players crossfade over MIX_FADE_SEC, then swap roles.
+  // Song mode only — in Video mode the standby belongs to the
+  // Video ⇄ Song swap. mixArmedRef = the next song cued (muted)
+  // in the standby, waiting for the fade window; mixRef = a fade
+  // in progress (the two players + its interval id).
+  const MIX_FADE_SEC = 5;
+  const MIX_ARM_SEC = MIX_FADE_SEC + 3;
+  const mixArmedRef = useRef<{ nextIdx: number; nextVideoId: string } | null>(null);
+  const mixRef = useRef<{ out: YTPlayer; inn: YTPlayer; timer: number } | null>(null);
   // Which physical player is the active one: false = the original
   // player in hostRef, true = the standby in standbyHostRef. The
   // state mirror exists only so the two host divs can swap their
@@ -4388,6 +4647,24 @@ export function App() {
     staleTime: 1000 * 60 * 60,
   });
   officialVideoRef.current = officialVideo.data ?? null;
+
+  // Non-music segments for the track's OWN upload (Song mode):
+  // the same SponsorBlock data the MV path uses, but for the
+  // audio upload the player actually holds — so spoken intros,
+  // skits and credit outros get skipped in Song mode too, and the
+  // DJ mix's incoming song starts at its music instead of its
+  // intro. Cached for an hour per video; a track with no
+  // submissions simply returns the bare window and plays as-is.
+  const trackSegments = useQuery({
+    queryKey: ["trackSegments", queue[qIndex]?.videoId],
+    queryFn: () =>
+      api.getTrackSegments({
+        videoId: queue[qIndex]?.videoId ?? "",
+        ...(currentDurationSec !== undefined ? { durationSec: currentDurationSec } : {}),
+      }),
+    enabled: !!queue[qIndex]?.videoId,
+    staleTime: 1000 * 60 * 60,
+  });
 
   const current: Track | undefined = queue[qIndex];
   // Stable queue-row keys (see queueKeysFor): rows keep their
@@ -4565,8 +4842,8 @@ export function App() {
   // because no slider move refreshes the window then.
   const suppressNativeEchoUntilRef = useRef(0);
 
-  const stateRef = useRef({ queue, qIndex, repeat, shuffle, playing });
-  stateRef.current = { queue, qIndex, repeat, shuffle, playing };
+  const stateRef = useRef({ queue, qIndex, repeat, shuffle, playing, showVideo });
+  stateRef.current = { queue, qIndex, repeat, shuffle, playing, showVideo };
   const progressRef = useRef(progress);
   progressRef.current = progress;
 
@@ -4597,6 +4874,21 @@ export function App() {
         segments: mv.segments,
       };
     }
+    // Song mode: the track's own upload, with its non-music
+    // segments when SponsorBlock knows them — the poll skips the
+    // intro / outro the same way it does in Video mode, and the
+    // scrubber + lyrics run in song coordinates (window start
+    // subtracted). No segments known → the whole video, as before.
+    const ts = trackSegments.data;
+    if (ts && !ts.error && (ts.segments.length > 0 || ts.musicStartSec > 0)) {
+      return {
+        isMv: false,
+        start: ts.musicStartSec,
+        end: ts.musicEndSec > ts.musicStartSec ? ts.musicEndSec : Number.POSITIVE_INFINITY,
+        videoDur: ts.videoDurationSec,
+        segments: ts.segments,
+      };
+    }
     return { isMv: false, start: 0, end: Number.POSITIVE_INFINITY, videoDur: 0, segments: [] };
   };
   const loadedWindowRef = useRef(loadedWindow);
@@ -4618,9 +4910,135 @@ export function App() {
     }
   };
 
+  // DJ mix helpers. cancelMix stops a fade / armed preload and
+  // leaves playback exactly where the user is: the incoming
+  // player (already the active one after the swap) keeps playing
+  // at full volume, the outgoing one is muted and paused.
+  const cancelMix = () => {
+    const m = mixRef.current;
+    if (m) {
+      window.clearInterval(m.timer);
+      try {
+        m.out.setVolume(0);
+        m.out.pauseVideo();
+      } catch {
+        /* outgoing mid-teardown; the swap already moved on */
+      }
+      try {
+        m.inn.setVolume(volumeRef.current);
+      } catch {
+        /* incoming mid-teardown; the caller reloads anyway */
+      }
+      mixRef.current = null;
+    }
+    mixArmedRef.current = null;
+  };
+
+  // The queue index a DJ mix would advance to, or null when no
+  // mix is possible. Mirrors step()'s advance rules: repeat-one
+  // restarts in place, and the end of the queue with repeat off
+  // stops honestly.
+  const mixNextIndex = (): number | null => {
+    const { queue: q, qIndex: i, repeat: r } = stateRef.current;
+    if (q.length === 0) return null;
+    if (r === 2) return null;
+    let n = i + 1;
+    if (n >= q.length) {
+      if (r === 0) return null;
+      n = 0;
+    }
+    return n;
+  };
+
+  // The fade itself. Roles swap FIRST — every control, the poll
+  // and the UI now talk to the incoming player — then the volumes
+  // ramp over MIX_FADE_SEC with an equal-power curve (outgoing
+  // falls as cos, incoming rises as sin). The target level is
+  // re-read every tick, so a slider move mid-fade just retargets
+  // the fade instead of fighting it. The fade clock freezes while
+  // paused (startedAt shifts by the tick) and both players are
+  // paused together — see togglePlayPause. At p = 1 the outgoing
+  // player is muted + paused and syncStandby re-warms the standby
+  // as the new track's MV counterpart.
+  const startMixFade = (outPlayer: YTPlayer, inPlayer: YTPlayer, nextIdx: number) => {
+    const { queue: q } = stateRef.current;
+    const nt = q[nextIdx];
+    if (!nt) {
+      mixArmedRef.current = null;
+      return;
+    }
+    navDirRef.current = 1;
+    if (modeMorph) commitModeMorph(modeMorph);
+    setPlaybackError(null);
+    setQIndex(nextIdx);
+    setPlaying(true);
+    setProgress({ t: 0, d: 0 });
+    playerRef.current = inPlayer;
+    standbyRef.current = outPlayer;
+    const rdy = playerReadyRef.current;
+    playerReadyRef.current = standbyReadyRef.current;
+    standbyReadyRef.current = rdy;
+    activeIsBRef.current = !activeIsBRef.current;
+    setActiveSlotB(activeIsBRef.current);
+    standbyLoadedRef.current = null;
+    mixArmedRef.current = null;
+    try {
+      inPlayer.playVideo();
+    } catch {
+      /* the poll's next tick retries via the state event */
+    }
+    let startedAt = performance.now();
+    const timer = window.setInterval(() => {
+      const target = volumeRef.current;
+      if (!stateRef.current.playing) {
+        try {
+          inPlayer.pauseVideo();
+        } catch {
+          /* incoming mid-teardown */
+        }
+        try {
+          outPlayer.pauseVideo();
+        } catch {
+          /* outgoing mid-teardown */
+        }
+        startedAt += 100;
+        return;
+      }
+      const p = Math.min(1, (performance.now() - startedAt) / (MIX_FADE_SEC * 1000));
+      try {
+        inPlayer.setVolume(Math.round(target * Math.sin((p * Math.PI) / 2)));
+      } catch {
+        /* incoming mid-teardown */
+      }
+      try {
+        outPlayer.setVolume(Math.round(target * Math.cos((p * Math.PI) / 2)));
+      } catch {
+        /* outgoing mid-teardown */
+      }
+      if (p >= 1) {
+        window.clearInterval(timer);
+        try {
+          outPlayer.pauseVideo();
+        } catch {
+          /* already ended on its own */
+        }
+        try {
+          outPlayer.setVolume(0);
+        } catch {
+          /* already muted */
+        }
+        mixRef.current = null;
+        syncStandbyRef.current();
+      }
+    }, 100);
+    mixRef.current = { out: outPlayer, inn: inPlayer, timer };
+  };
+
   const playAt = (list: Track[], index: number) => {
     const t = list[index];
     if (!t) return;
+    // A manual pick supersedes any fade / armed preload.
+    cancelMix();
     // A fresh pick morphs the poster forward; a mode morph still
     // melting is committed instantly — the track change
     // supersedes it.
@@ -4663,6 +5081,11 @@ export function App() {
   const step = (dir: 1 | -1, fromEnd = false) => {
     const { queue: q, qIndex: i, repeat: r } = stateRef.current;
     if (q.length === 0) return;
+    // A manual step (button, notification, headset) supersedes
+    // any fade / armed preload — cancelMix leaves playback on the
+    // song the fade was moving to, and the step below moves on
+    // from there.
+    cancelMix();
     // Poster morph direction for this switch, and a mode morph
     // still melting is committed instantly — the track change
     // supersedes it.
@@ -4677,10 +5100,12 @@ export function App() {
       setProgress((p) => ({ t: 0, d: p.d }));
       if (playerReadyRef.current && playerRef.current) {
         try {
-          // In Video mode "restart the song" means the music
-          // window's start, not the video's 0:00 intro.
+          // "Restart the song" means the music window's start, not
+          // the video's 0:00 intro — in Video mode the MV's music
+          // start, in Song mode the upload's SponsorBlock intro
+          // skip when one is known.
           const win = loadedWindowRef.current();
-          playerRef.current.seekTo(win.isMv ? win.start : 0, true);
+          playerRef.current.seekTo(win.start, true);
           playerRef.current.playVideo();
         } catch {
           const cur = q[i];
@@ -4932,8 +5357,10 @@ export function App() {
         // different level, or the embed's own volume control was
         // used in Video mode), pull the slider to the real playback
         // volume. Skipped for a moment after the user moves a
-        // slider themselves, so a drag is never fought.
-        if (Date.now() - lastVolumeChangeRef.current > 1500) {
+        // slider themselves, so a drag is never fought — and
+        // skipped entirely during a DJ mix, when the active
+        // player's volume is deliberately ramping 0 → target.
+        if (!mixRef.current && Date.now() - lastVolumeChangeRef.current > 1500) {
           try {
             const pv = playerRef.current.getVolume();
             if (Number.isFinite(pv) && Math.abs(pv - volumeRef.current) > 1) {
@@ -4948,7 +5375,7 @@ export function App() {
         const win = loadedWindowRef.current();
         const { queue: q, qIndex: i, playing: isPlaying } = stateRef.current;
         const cur = q[i];
-        const key = `${cur?.videoId ?? ""}|${win.isMv ? "mv" : "song"}`;
+        const key = `${cur?.videoId ?? ""}|${win.isMv ? "mv" : "song"}|${win.start}`;
         if (key !== prevKey) {
           // A new song / a mode swap: positions from the old
           // loaded video must not look like a "crossing".
@@ -4964,7 +5391,18 @@ export function App() {
         // the poll's "previous position" memory must follow it,
         // not the pre-skip reading.
         let effectiveRaw = rawT;
-        if (win.isMv && isPlaying && cur) {
+        // Non-music skipping runs in both modes now: Video mode
+        // (the MV's window + segments) and Song mode (the upload's
+        // own segments, when SponsorBlock knows them). With nothing
+        // to skip — no segments, window start 0, no outro edge —
+        // the block is a no-op, exactly as before.
+        if (
+          isPlaying &&
+          cur &&
+          (win.segments.length > 0 ||
+            win.start > 0.5 ||
+            (Number.isFinite(win.end) && win.videoDur > 0 && win.end < win.videoDur - 0.5))
+        ) {
           // Effective skip list: the video's known non-music
           // segments, plus the window edges themselves (the
           // duration-comparison fallback knows no segments, only
@@ -5017,13 +5455,13 @@ export function App() {
         }
         prevRaw = effectiveRaw;
 
-        // Raw → song coordinates. In Song mode this is the
-        // identity; in Video mode the music window is subtracted
-        // so both modes share one timeline.
-        const d = win.isMv
-          ? Math.max(0, (Number.isFinite(win.end) ? win.end : rawD) - win.start) || rawD
-          : rawD;
-        const t = win.isMv ? Math.min(Math.max(effectiveRaw - win.start, 0), d) : effectiveRaw;
+        // Raw → song coordinates in both modes now: the window
+        // start is subtracted whenever the window has one (Video
+        // mode's MV intro, or Song mode's SponsorBlock intro skip),
+        // so the scrubber and lyrics share one timeline.
+        const songEnd = Number.isFinite(win.end) ? win.end : rawD;
+        const d = Math.max(0, songEnd - win.start) || rawD;
+        const t = Math.min(Math.max(effectiveRaw - win.start, 0), d);
 
         // Warm-standby sync: the standby player holds the OTHER
         // version of this song (official MV ⇄ song upload), muted.
@@ -5051,6 +5489,58 @@ export function App() {
           }
         }
 
+        // DJ mix: instead of a hard cut at the natural end, the
+        // next song is preloaded into the warm standby and the two
+        // players crossfade over MIX_FADE_SEC. Song mode only — in
+        // Video mode the standby belongs to the Video ⇄ Song swap.
+        // Short songs (< MIX_ARM_SEC + 2s) keep the plain cut.
+        if (
+          isPlaying &&
+          !stateRef.current.showVideo &&
+          cur &&
+          Number.isFinite(d) &&
+          d > MIX_ARM_SEC + 2 &&
+          !mixRef.current
+        ) {
+          const remain = d - t;
+          if (!mixArmedRef.current && remain <= MIX_ARM_SEC && remain > 0) {
+            // Arm: cue the next song in the standby, muted, so it
+            // is buffered before the fade starts. The poll's
+            // lockstep sync ignores it (its trackId is the NEXT
+            // track, not cur), and syncStandby is guarded the same
+            // way — nothing else touches the standby while armed.
+            // Arming inside the fade window still works: the fade
+            // branch below picks it up on this same tick.
+            const n = mixNextIndex();
+            const s = standbyRef.current;
+            if (n !== null && s && standbyReadyRef.current) {
+              const nt = q[n];
+              if (nt && nt.videoId !== cur.videoId) {
+                try {
+                  s.setVolume(0);
+                  s.cueVideoById({ videoId: nt.videoId, startSeconds: 0 });
+                  standbyLoadedRef.current = { trackId: nt.videoId, videoId: nt.videoId, start: 0 };
+                  mixArmedRef.current = { nextIdx: n, nextVideoId: nt.videoId };
+                } catch {
+                  mixArmedRef.current = null;
+                }
+              }
+            }
+          }
+          if (mixArmedRef.current && remain <= MIX_FADE_SEC && remain > 0) {
+            const armed = mixArmedRef.current;
+            const s = standbyRef.current;
+            const active = playerRef.current;
+            if (s && active && standbyReadyRef.current) {
+              startMixFade(active, s, armed.nextIdx);
+            } else {
+              // Standby died mid-arm: fall back to the normal hard
+              // cut at the natural end.
+              mixArmedRef.current = null;
+            }
+          }
+        }
+
         setProgress((prev) =>
           Math.floor(prev.t) !== Math.floor(t) || Math.abs(prev.d - d) > 0.5 ? { t, d } : prev,
         );
@@ -5072,6 +5562,9 @@ export function App() {
       () => {
         try {
           playerRef.current?.pauseVideo();
+          // A fade has two audible players — stop the outgoing one
+          // too (the ramp freezes while paused).
+          if (mixRef.current) mixRef.current.out.pauseVideo();
         } catch {
           /* player mid-rebuild; the state flip below still applies */
         }
@@ -5098,9 +5591,26 @@ export function App() {
     try {
       if (playing) {
         p.pauseVideo();
+        // A fade has two audible players: pause the outgoing one
+        // too, or it keeps fading out under a paused UI. The ramp
+        // freezes its clock while paused (see startMixFade).
+        if (mixRef.current) {
+          try {
+            mixRef.current.out.pauseVideo();
+          } catch {
+            /* outgoing mid-teardown */
+          }
+        }
         setPlaying(false);
       } else {
         p.playVideo();
+        if (mixRef.current) {
+          try {
+            mixRef.current.out.playVideo();
+          } catch {
+            /* outgoing mid-teardown */
+          }
+        }
         setPlaying(true);
       }
     } catch {
@@ -5116,12 +5626,20 @@ export function App() {
   // music window's start, so seeking behaves identically in both
   // modes.
   const safeSeek = (sec: number) => {
+    // A seek moves the song away from its end, so an armed preload
+    // for the old end position is stale — drop it (the poll re-arms
+    // at the new end). A fade already in progress is untouched:
+    // it seeks the incoming player below, like any other seek.
+    if (mixArmedRef.current) {
+      mixArmedRef.current = null;
+      resetStandby();
+    }
     const songPos = Math.max(0, sec);
     setProgress((p) => ({ ...p, t: songPos }));
     if (playerReadyRef.current && playerRef.current) {
       try {
         const win = loadedWindowRef.current();
-        playerRef.current.seekTo(win.isMv ? win.start + songPos : songPos, true);
+        playerRef.current.seekTo(win.start + songPos, true);
       } catch {
         /* next poll re-syncs the displayed position */
       }
@@ -5279,6 +5797,11 @@ export function App() {
   const syncStandby = () => {
     const s = standbyRef.current;
     if (!s || !standbyReadyRef.current) return;
+    // DJ mix owns the standby while armed / fading: it holds the
+    // NEXT song, not this track's MV counterpart. Re-warming it
+    // here would kill the fade. startMixFade re-warms it itself
+    // once the fade is done.
+    if (mixRef.current || mixArmedRef.current) return;
     const { queue: q, qIndex: i, playing: isPlaying } = stateRef.current;
     const cur = q[i];
     if (!cur) return;
@@ -6064,6 +6587,12 @@ export function App() {
     setQueue((prev) => [...prev, track]);
   }, [startRadioQueue]);
 
+  // "Add to playlist": opens the picker sheet for this song (the
+  // ⋯ menu on any track row). The sheet itself does the adding.
+  const onAddToPlaylist = useCallback((track: Track) => {
+    setAddToPlaylistTrack(track);
+  }, []);
+
   // "Clear queue": drop every song except the one playing now, so
   // clearing never stops playback. The queue view arms an in-page
   // confirm first (clearArmed), because there is no going back.
@@ -6731,6 +7260,7 @@ export function App() {
                       onToggleLikeTrack={onToggleLike}
                       onPlayNextTrack={onPlayNext}
                       onAddToQueueTrack={onAddToQueue}
+                      onAddToPlaylistTrack={onAddToPlaylist}
                     />
                   ))}
                 </div>
@@ -6773,6 +7303,7 @@ export function App() {
                       onToggleLikeTrack={onToggleLike}
                       onPlayNextTrack={onPlayNext}
                       onAddToQueueTrack={onAddToQueue}
+                      onAddToPlaylistTrack={onAddToPlaylist}
                     />
                   ))}
                 </div>
@@ -7175,6 +7706,7 @@ export function App() {
                       onToggleLikeTrack={onToggleLike}
                       onPlayNextTrack={onPlayNext}
                       onAddToQueueTrack={onAddToQueue}
+                      onAddToPlaylistTrack={onAddToPlaylist}
                     />
                   ))}
                   {listFilter.trim() && filterTracks(collection.data.tracks).length === 0 && (
@@ -7278,6 +7810,7 @@ export function App() {
                           onToggleLikeTrack={onToggleLike}
                           onPlayNextTrack={onPlayNext}
                           onAddToQueueTrack={onAddToQueue}
+                      onAddToPlaylistTrack={onAddToPlaylist}
                         />
                       ))}
                     </div>
@@ -7403,6 +7936,7 @@ export function App() {
                       onToggleLikeTrack={onToggleLike}
                       onPlayNextTrack={onPlayNext}
                       onAddToQueueTrack={onAddToQueue}
+                      onAddToPlaylistTrack={onAddToPlaylist}
                   />
                 ))}
               </div>
@@ -7746,6 +8280,7 @@ export function App() {
                               onToggleLikeTrack={onToggleLike}
                               onPlayNextTrack={onPlayNext}
                               onAddToQueueTrack={onAddToQueue}
+                      onAddToPlaylistTrack={onAddToPlaylist}
                             />
                           ))}
                         </div>
@@ -7778,6 +8313,7 @@ export function App() {
                           onToggleLikeTrack={onToggleLike}
                           onPlayNextTrack={onPlayNext}
                           onAddToQueueTrack={onAddToQueue}
+                      onAddToPlaylistTrack={onAddToPlaylist}
                         />
                       ))}
                     </div>
@@ -7806,6 +8342,14 @@ export function App() {
 
         {showAddPlaylist && (
           <AddPlaylistSheet onClose={() => setShowAddPlaylist(false)} onOpenPlaylist={openAddedPlaylist} />
+        )}
+
+        {addToPlaylistTrack && (
+          <AddToPlaylistSheet
+            track={addToPlaylistTrack}
+            playlists={userPlaylistsQuery.data?.playlists ?? []}
+            onClose={() => setAddToPlaylistTrack(null)}
+          />
         )}
 
         {tab === "profile" && (
@@ -8547,6 +9091,7 @@ export function App() {
                       onToggleLikeTrack={onToggleLike}
                       onPlayNextTrack={onPlayNext}
                       onAddToQueueTrack={onAddToQueue}
+                      onAddToPlaylistTrack={onAddToPlaylist}
                     />
                   ))}
                 </div>

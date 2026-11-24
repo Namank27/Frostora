@@ -82,6 +82,16 @@ export interface OfficialVideoResponse {
   skipSource: "segments" | "duration" | "none";
 }
 
+export interface TrackSegmentsResponse {
+  videoId: string;
+  error: string | null;
+  videoDurationSec: number;
+  musicStartSec: number;
+  musicEndSec: number;
+  segments: { start: number; end: number; category: string }[];
+  skipSource: "segments" | "duration" | "none";
+}
+
 export interface ToggleResponse {
   liked: boolean;
 }
@@ -194,12 +204,18 @@ export interface ImportPlaylistResponse {
   error: string | null;
 }
 
+export interface AddTrackToPlaylistResponse {
+  ok: boolean;
+  added: boolean;
+  error: string | null;
+}
+
 export interface FeedbackResponse {
   ok: boolean;
 }
 
 /**
- * The 29 server actions as a map of action name -> handler function,
+ * The 30 server actions as a map of action name -> handler function,
  * matching the shape the ported server's `export const Actions` will
  * have. The fetch client in `api.ts` is typed from this map.
  */
@@ -218,12 +234,17 @@ export interface Actions {
     artist: string;
     durationSec?: number;
   }) => Promise<OfficialVideoResponse>;
+  getTrackSegments: (args: {
+    videoId: string;
+    durationSec?: number;
+  }) => Promise<TrackSegmentsResponse>;
   toggleLike: (args: { track: TrackInput }) => Promise<ToggleResponse>;
   recordPlay: (args: { track: TrackInput }) => Promise<OkResponse>;
   hidePlaylist: (args: { id: string; title?: string }) => Promise<OkResponse>;
   previewPlaylistImport: (args: { url: string }) => Promise<PlaylistImportPreviewResponse>;
   importPlaylist: (args: { url: string; name?: string }) => Promise<ImportPlaylistResponse>;
   createPlaylist: (args: { name: string }) => Promise<ImportPlaylistResponse>;
+  addTrackToPlaylist: (args: { playlistId: string; track: TrackInput }) => Promise<AddTrackToPlaylistResponse>;
   listUserPlaylists: (args: Record<string, never>) => Promise<ListUserPlaylistsResponse>;
   getUserPlaylist: (args: { playlistId: string }) => Promise<CollectionResponse>;
   deleteUserPlaylist: (args: { id: string }) => Promise<OkResponse>;
